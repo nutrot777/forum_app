@@ -1,5 +1,5 @@
 import { ReplyWithUser } from "@shared/schema";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -58,7 +58,7 @@ const ReplyItem: React.FC<ReplyItemProps> = ({ reply, discussionId, depth = 0 })
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(reply.content);
   const [isMarked, setIsMarked] = useState(false);
-  const [helpfulCount, setHelpfulCount] = useState(reply.helpfulCount);
+  const [helpfulCount, setHelpfulCount] = useState(reply.helpfulCount || 0);
   
   // Check if current user has marked this reply as helpful
   const checkIfMarkedAsHelpful = async () => {
@@ -74,9 +74,9 @@ const ReplyItem: React.FC<ReplyItemProps> = ({ reply, discussionId, depth = 0 })
   };
   
   // Run on component mount
-  useState(() => {
+  useEffect(() => {
     checkIfMarkedAsHelpful();
-  });
+  }, []);
   
   const handleToggleHelpful = async () => {
     if (!user) return;
@@ -156,7 +156,9 @@ const ReplyItem: React.FC<ReplyItemProps> = ({ reply, discussionId, depth = 0 })
     }
   };
   
-  const createdAt = formatDistanceToNow(new Date(reply.createdAt), { addSuffix: true });
+  const createdAt = reply.createdAt 
+    ? formatDistanceToNow(new Date(reply.createdAt), { addSuffix: true }) 
+    : "some time ago";
   const isOwner = user && user.id === reply.userId;
   const maxDepth = 3;
   

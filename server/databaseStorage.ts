@@ -111,7 +111,7 @@ export class DatabaseStorage implements IStorage {
       // Default to 'recent'
       discussionsWithUsers.sort((a, b) => {
         if (!a.createdAt || !b.createdAt) return 0;
-        return b.createdAt.getTime() - a.createdAt.getTime();
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
       });
     }
     

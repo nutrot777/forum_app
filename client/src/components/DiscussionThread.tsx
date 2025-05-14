@@ -287,14 +287,14 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({ discussion }) => {
         />
       )}
       
-      {!showReplies && discussion.replies.length > 0 && (
+      {!showReplies && discussion.replies?.length > 0 && (
         <div className="border-t border-gray-100 px-4 py-3 bg-gray-50 rounded-b-lg">
           <Button 
             variant="ghost"
             className="w-full text-center text-[#0079D3] font-medium text-sm"
             onClick={() => setShowReplies(true)}
           >
-            Show {discussion.replies.length} replies <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="inline-block ml-1 h-4 w-4"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            Show {discussion.replies?.length || 0} replies <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="inline-block ml-1 h-4 w-4"><polyline points="6 9 12 15 18 9"></polyline></svg>
           </Button>
         </div>
       )}
