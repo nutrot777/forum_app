@@ -1,21 +1,27 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { UserProfile } from '@/components/UserProfile';
 import { Notifications } from '@/components/Notifications';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { BellIcon, SettingsIcon, UserIcon } from 'lucide-react';
+import { BellIcon, UserIcon } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
-import { Navigate } from 'wouter';
-import { useTitle } from '@/hooks/use-title';
+import { useLocation } from 'wouter';
 
 export default function Settings() {
   const { user } = useAuth();
-  useTitle('Settings - Discussion Forum');
+  const [, setLocation] = useLocation();
+  
+  // Set document title
+  useEffect(() => {
+    document.title = 'Settings - Discussion Forum';
+  }, []);
 
   // Require authentication
-  if (!user) {
-    return <Navigate to="/login" />;
-  }
+  useEffect(() => {
+    if (!user) {
+      setLocation('/login');
+    }
+  }, [user, setLocation]);
 
   return (
     <div className="container max-w-4xl py-8">

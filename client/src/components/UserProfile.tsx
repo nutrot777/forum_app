@@ -46,10 +46,7 @@ export function UserProfile() {
     
     setIsLoading(true);
     try {
-      const response = await apiRequest('/api/user/profile', {
-        method: 'PATCH',
-        body: JSON.stringify(data),
-      });
+      const response = await apiRequest("PATCH", '/api/user/profile', data);
 
       toast({
         title: "Profile updated",
