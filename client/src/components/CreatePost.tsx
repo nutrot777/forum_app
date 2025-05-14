@@ -61,6 +61,7 @@ const CreatePost: React.FC<CreatePostProps> = ({ onSuccess }) => {
 
     try {
       const formData = new FormData();
+      const payload = {title, content, userId:user.id.toString(), selectedImage}
       formData.append("title", title);
       formData.append("content", content);
       formData.append("userId", user.id.toString());
@@ -69,7 +70,8 @@ const CreatePost: React.FC<CreatePostProps> = ({ onSuccess }) => {
         formData.append("image", selectedImage);
       }
 
-      await apiRequest("POST", "/api/discussions", formData);
+      console.log({formData, payload})
+          await apiRequest("POST", "/api/discussions", formData);
       
       setTitle("");
       setContent("");
