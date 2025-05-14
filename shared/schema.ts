@@ -45,20 +45,29 @@ export const insertUserSchema = createInsertSchema(users).pick({
   password: true,
 });
 
-export const insertDiscussionSchema = createInsertSchema(discussions).pick({
-  title: true,
-  content: true,
-  userId: true,
-  imagePath: true,
-});
+export const insertDiscussionSchema = createInsertSchema(discussions)
+  .pick({
+    title: true,
+    content: true,
+    userId: true,
+    imagePath: true,
+  })
+  .extend({
+    imagePath: z.string().nullable().optional(),
+  });
 
-export const insertReplySchema = createInsertSchema(replies).pick({
-  content: true,
-  userId: true,
-  discussionId: true,
-  parentId: true,
-  imagePath: true,
-});
+export const insertReplySchema = createInsertSchema(replies)
+  .pick({
+    content: true,
+    userId: true,
+    discussionId: true,
+    parentId: true,
+    imagePath: true,
+  })
+  .extend({
+    imagePath: z.string().nullable().optional(),
+    parentId: z.number().nullable().optional(),
+  });
 
 export const insertHelpfulMarkSchema = createInsertSchema(helpfulMarks).pick({
   userId: true,
