@@ -5,6 +5,8 @@ interface User {
   id: number;
   username: string;
   isOnline: boolean;
+  email?: string | null;
+  emailNotifications?: boolean;
 }
 
 interface AuthContextType {

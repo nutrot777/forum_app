@@ -6,12 +6,14 @@ import {
   insertUserSchema, 
   insertDiscussionSchema, 
   insertReplySchema,
-  insertHelpfulMarkSchema
+  insertHelpfulMarkSchema,
+  insertNotificationSchema
 } from "@shared/schema";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
 import { WebSocketServer } from "ws";
+import { sendEmail, generateReplyNotificationEmail, generateHelpfulNotificationEmail } from "./emailService";
 
 // Configure multer for file uploads
 const uploadsDir = path.join(process.cwd(), "uploads");
@@ -271,6 +273,90 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "User not found" });
       }
       
+      // Create notification for the discussion creator
+      const discussion = await storage.getDiscussionById(reply.discussionId);
+      if (discussion && discussion.userId !== reply.userId) {
+        // If replying to someone else's discussion
+        try {
+          const notificationData = {
+            userId: discussion.userId,
+            triggeredByUserId: reply.userId,
+            discussionId: discussion.id,
+            replyId: reply.id,
+            type: 'reply',
+            message: `${user.username} replied to your discussion "${discussion.title}"`,
+          };
+          
+          const notification = await storage.createNotification(notificationData);
+          
+          // Send email notification if the user has email and notifications enabled
+          const discussionCreator = await storage.getUser(discussion.userId);
+          if (discussionCreator && discussionCreator.email && discussionCreator.emailNotifications) {
+            const emailContent = generateReplyNotificationEmail(
+              discussionCreator.username,
+              user.username,
+              discussion.title,
+              reply.content,
+              discussion.id
+            );
+            
+            await sendEmail(
+              discussionCreator.email,
+              `New reply to your discussion: ${discussion.title}`,
+              emailContent.text,
+              emailContent.html
+            );
+            
+            await storage.markNotificationEmailSent(notification.id);
+          }
+        } catch (error) {
+          console.error("Error creating notification:", error);
+          // Don't fail the whole request if notification creation fails
+        }
+      }
+      
+      // If it's a reply to another reply, notify that person too
+      if (reply.parentId) {
+        const parentReply = await storage.getReplyById(reply.parentId);
+        if (parentReply && parentReply.userId !== reply.userId) {
+          try {
+            const notificationData = {
+              userId: parentReply.userId,
+              triggeredByUserId: reply.userId,
+              discussionId: reply.discussionId,
+              replyId: reply.id,
+              type: 'reply',
+              message: `${user.username} replied to your comment`,
+            };
+            
+            const notification = await storage.createNotification(notificationData);
+            
+            // Send email notification
+            const parentReplyCreator = await storage.getUser(parentReply.userId);
+            if (parentReplyCreator && parentReplyCreator.email && parentReplyCreator.emailNotifications) {
+              const emailContent = generateReplyNotificationEmail(
+                parentReplyCreator.username,
+                user.username,
+                discussion?.title || "a discussion", // Fallback if discussion not found
+                reply.content,
+                reply.discussionId
+              );
+              
+              await sendEmail(
+                parentReplyCreator.email,
+                `New reply to your comment`,
+                emailContent.text,
+                emailContent.html
+              );
+              
+              await storage.markNotificationEmailSent(notification.id);
+            }
+          } catch (error) {
+            console.error("Error creating notification for reply parent:", error);
+          }
+        }
+      }
+      
       const { password, ...userWithoutPassword } = user;
       
       res.status(201).json({
@@ -363,6 +449,96 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const validatedData = insertHelpfulMarkSchema.parse(data);
       const mark = await storage.markAsHelpful(validatedData);
+      
+      // Get the user who marked as helpful
+      const markingUser = await storage.getUser(parseInt(userId));
+      if (!markingUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      // Create notification based on whether it's for a discussion or reply
+      try {
+        if (discussionId) {
+          const discussion = await storage.getDiscussionById(parseInt(discussionId));
+          if (discussion && discussion.userId !== parseInt(userId)) {
+            // Create notification for discussion author
+            const notificationData = {
+              userId: discussion.userId,
+              triggeredByUserId: parseInt(userId),
+              discussionId: parseInt(discussionId),
+              replyId: null,
+              type: 'helpful',
+              message: `${markingUser.username} marked your discussion "${discussion.title}" as helpful`,
+            };
+            
+            const notification = await storage.createNotification(notificationData);
+            
+            // Send email notification if user has email and notifications enabled
+            const discussionOwner = await storage.getUser(discussion.userId);
+            if (discussionOwner && discussionOwner.email && discussionOwner.emailNotifications) {
+              const emailContent = generateHelpfulNotificationEmail(
+                discussionOwner.username,
+                markingUser.username,
+                discussion.title,
+                'discussion',
+                discussion.id
+              );
+              
+              await sendEmail(
+                discussionOwner.email,
+                `Your discussion was marked as helpful!`,
+                emailContent.text,
+                emailContent.html
+              );
+              
+              await storage.markNotificationEmailSent(notification.id);
+            }
+          }
+        } else if (replyId) {
+          const reply = await storage.getReplyById(parseInt(replyId));
+          if (reply && reply.userId !== parseInt(userId)) {
+            // Get the parent discussion for context
+            const discussion = await storage.getDiscussionById(reply.discussionId);
+            
+            // Create notification for reply author
+            const notificationData = {
+              userId: reply.userId,
+              triggeredByUserId: parseInt(userId),
+              discussionId: reply.discussionId,
+              replyId: parseInt(replyId),
+              type: 'helpful',
+              message: `${markingUser.username} marked your reply as helpful`,
+            };
+            
+            const notification = await storage.createNotification(notificationData);
+            
+            // Send email notification
+            const replyOwner = await storage.getUser(reply.userId);
+            if (replyOwner && replyOwner.email && replyOwner.emailNotifications) {
+              const emailContent = generateHelpfulNotificationEmail(
+                replyOwner.username,
+                markingUser.username,
+                discussion ? discussion.title : 'a discussion',
+                'reply',
+                reply.discussionId
+              );
+              
+              await sendEmail(
+                replyOwner.email,
+                `Your reply was marked as helpful!`,
+                emailContent.text,
+                emailContent.html
+              );
+              
+              await storage.markNotificationEmailSent(notification.id);
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Error creating helpful notification:", error);
+        // Don't fail the request if notification creation fails
+      }
+      
       res.status(201).json(mark);
     } catch (error) {
       res.status(400).json({ message: error instanceof Error ? error.message : "Invalid request" });
@@ -410,6 +586,135 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(200).json({ isMarked });
     } catch (error) {
       res.status(400).json({ message: error instanceof Error ? error.message : "Invalid request" });
+    }
+  });
+
+  // Notifications routes
+  app.get("/api/notifications", async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId;
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const notifications = await storage.getNotifications(userId);
+      res.status(200).json(notifications);
+    } catch (error) {
+      res.status(500).json({ message: error instanceof Error ? error.message : "Server error" });
+    }
+  });
+
+  app.get("/api/notifications/unread/count", async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId;
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const count = await storage.getUnreadNotificationsCount(userId);
+      res.status(200).json({ count });
+    } catch (error) {
+      res.status(500).json({ message: error instanceof Error ? error.message : "Server error" });
+    }
+  });
+
+  app.patch("/api/notifications/:id/read", async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId;
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const notificationId = parseInt(req.params.id);
+      const notification = await storage.getNotification(notificationId);
+      
+      if (!notification) {
+        return res.status(404).json({ message: "Notification not found" });
+      }
+      
+      if (notification.userId !== userId) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+
+      const updatedNotification = await storage.markNotificationAsRead(notificationId);
+      res.status(200).json(updatedNotification);
+    } catch (error) {
+      res.status(500).json({ message: error instanceof Error ? error.message : "Server error" });
+    }
+  });
+
+  app.patch("/api/notifications/read/all", async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId;
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      await storage.markAllNotificationsAsRead(userId);
+      res.status(200).json({ message: "All notifications marked as read" });
+    } catch (error) {
+      res.status(500).json({ message: error instanceof Error ? error.message : "Server error" });
+    }
+  });
+
+  app.delete("/api/notifications/:id", async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId;
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const notificationId = parseInt(req.params.id);
+      const notification = await storage.getNotification(notificationId);
+      
+      if (!notification) {
+        return res.status(404).json({ message: "Notification not found" });
+      }
+      
+      if (notification.userId !== userId) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+
+      await storage.deleteNotification(notificationId);
+      res.status(200).json({ message: "Notification deleted" });
+    } catch (error) {
+      res.status(500).json({ message: error instanceof Error ? error.message : "Server error" });
+    }
+  });
+
+  // User profile routes
+  app.patch("/api/user/profile", async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId;
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { email, emailNotifications } = req.body;
+      
+      // We only allow updating these specific fields
+      const userData: Partial<{ email: string | null, emailNotifications: boolean }> = {};
+      
+      if (email !== undefined) {
+        userData.email = email;
+      }
+      
+      if (emailNotifications !== undefined) {
+        userData.emailNotifications = emailNotifications;
+      }
+
+      const updatedUser = await storage.updateUser(userId, userData);
+      
+      if (!updatedUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      // Don't return the password
+      const { password, ...userWithoutPassword } = updatedUser;
+      
+      res.status(200).json(userWithoutPassword);
+    } catch (error) {
+      res.status(500).json({ message: error instanceof Error ? error.message : "Server error" });
     }
   });
 
