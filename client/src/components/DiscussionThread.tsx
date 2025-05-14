@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -35,7 +35,7 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({ discussion }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(discussion.title);
   const [editContent, setEditContent] = useState(discussion.content);
-  const [helpfulCount, setHelpfulCount] = useState(discussion.helpfulCount);
+  const [helpfulCount, setHelpfulCount] = useState(discussion.helpfulCount || 0);
 
   // Check if current user has marked this discussion as helpful
   const checkIfMarkedAsHelpful = async () => {
@@ -51,9 +51,9 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({ discussion }) => {
   };
 
   // Run on component mount
-  useState(() => {
+  useEffect(() => {
     checkIfMarkedAsHelpful();
-  });
+  }, []);
 
   const handleToggleHelpful = async () => {
     if (!user) return;
@@ -64,13 +64,13 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({ discussion }) => {
           userId: user.id,
           discussionId: discussion.id
         });
-        setHelpfulCount(prev => Math.max(0, prev - 1));
+        setHelpfulCount(prev => Math.max(0, (prev || 0) - 1));
       } else {
         await apiRequest("POST", "/api/helpful", {
           userId: user.id,
           discussionId: discussion.id
         });
-        setHelpfulCount(prev => prev + 1);
+        setHelpfulCount(prev => (prev || 0) + 1);
       }
       setIsMarked(!isMarked);
     } catch (error) {
@@ -135,7 +135,9 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({ discussion }) => {
     }
   };
 
-  const createdAt = formatDistanceToNow(new Date(discussion.createdAt), { addSuffix: true });
+  const createdAt = discussion.createdAt 
+    ? formatDistanceToNow(new Date(discussion.createdAt), { addSuffix: true })
+    : "some time ago";
   const isOwner = user && user.id === discussion.userId;
 
   return (
@@ -257,7 +259,7 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({ discussion }) => {
                 onClick={() => setShowReplies(!showReplies)}
               >
                 <MessageSquare className="h-4 w-4 mr-1" />
-                <span>Reply ({discussion.replies.length})</span>
+                <span>Reply ({discussion.replies?.length || 0})</span>
               </Button>
               <Button
                 variant="ghost"
@@ -278,7 +280,7 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({ discussion }) => {
         </div>
       </div>
       
-      {discussion.replies.length > 0 && showReplies && (
+      {discussion.replies?.length > 0 && showReplies && (
         <Replies 
           discussionId={discussion.id} 
           replies={discussion.replies} 
