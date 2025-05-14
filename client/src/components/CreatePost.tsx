@@ -71,7 +71,7 @@ const CreatePost: React.FC<CreatePostProps> = ({ onSuccess }) => {
       }
 
       console.log({formData, payload})
-          await apiRequest("POST", "/api/discussions", formData);
+          await apiRequest("POST", "/api/discussions", payload);
       
       setTitle("");
       setContent("");
