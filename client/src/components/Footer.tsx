@@ -9,10 +9,10 @@ const Footer: React.FC = () => {
             <p className="text-sm">&copy; {new Date().getFullYear()} StudentForum. All rights reserved.</p>
           </div>
           <div className="flex space-x-4">
-            <Link href="#"><a className="text-gray-400 hover:text-white">Terms</a></Link>
-            <Link href="#"><a className="text-gray-400 hover:text-white">Privacy</a></Link>
-            <Link href="#"><a className="text-gray-400 hover:text-white">Help</a></Link>
-            <Link href="#"><a className="text-gray-400 hover:text-white">Contact</a></Link>
+            <Link href="#" className="text-gray-400 hover:text-white">Terms</Link>
+            <Link href="#" className="text-gray-400 hover:text-white">Privacy</Link>
+            <Link href="#" className="text-gray-400 hover:text-white">Help</Link>
+            <Link href="#" className="text-gray-400 hover:text-white">Contact</Link>
           </div>
         </div>
       </div>

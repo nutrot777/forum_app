@@ -121,11 +121,9 @@ export function UserProfile() {
       </CardContent>
       <CardFooter className="flex justify-between text-sm text-muted-foreground">
         <div>
-          {!process.env.SENDGRID_API_KEY && (
-            <p className="text-amber-500">
-              Note: Email delivery is currently disabled. Contact the administrator to enable it.
-            </p>
-          )}
+          <p className="text-amber-500">
+            Note: Email delivery is currently disabled. Contact the administrator to enable it.
+          </p>
         </div>
       </CardFooter>
     </Card>

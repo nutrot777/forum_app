@@ -14,11 +14,9 @@ const Header: React.FC = () => {
   return (
     <header className="bg-white shadow sticky top-0 z-50">
       <div className="container mx-auto px-4 py-3 flex items-center justify-between">
-        <Link href="/">
-          <a className="flex items-center">
-            <Rows3 className="text-[#0079D3] h-6 w-6 mr-2" />
-            <h1 className="text-xl font-ibm font-semibold">StudentForum</h1>
-          </a>
+        <Link href="/" className="flex items-center">
+          <Rows3 className="text-[#0079D3] h-6 w-6 mr-2" />
+          <h1 className="text-xl font-ibm font-semibold">StudentForum</h1>
         </Link>
         
         {user && (
