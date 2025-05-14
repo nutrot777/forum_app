@@ -161,16 +161,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/discussions", upload.single("image"), async (req: Request, res: Response) => {
     try {
+      console.log("POST /api/discussions request body:", req.body);
+      console.log("POST /api/discussions file:", req.file);
+      
       const data = {
         ...req.body,
         userId: parseInt(req.body.userId),
-        imagePath: req.file ? `/uploads/${req.file.filename}` : undefined
+        imagePath: req.file ? `/uploads/${req.file.filename}` : null
       };
+      
+      console.log("Data prepared for validation:", data);
       
       const validatedData = insertDiscussionSchema.parse(data);
       const discussion = await storage.createDiscussion(validatedData);
       res.status(201).json(discussion);
     } catch (error) {
+      console.error("Error creating discussion:", error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Invalid request" });
     }
   });
@@ -194,15 +200,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "You can only edit your own discussions" });
       }
       
+      console.log("PATCH /api/discussions/:id request body:", req.body);
+      console.log("PATCH /api/discussions/:id file:", req.file);
+      
       const data = {
         ...req.body,
         userId: parseInt(req.body.userId),
         imagePath: req.file ? `/uploads/${req.file.filename}` : discussion.imagePath
       };
       
+      console.log("Data prepared for update:", data);
+      
       const updatedDiscussion = await storage.updateDiscussion(id, data);
       res.status(200).json(updatedDiscussion);
     } catch (error) {
+      console.error("Error updating discussion:", error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Invalid request" });
     }
   });
@@ -237,13 +249,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Reply routes
   app.post("/api/replies", upload.single("image"), async (req: Request, res: Response) => {
     try {
+      console.log("POST /api/replies request body:", req.body);
+      console.log("POST /api/replies file:", req.file);
+      
       const data = {
         ...req.body,
         userId: parseInt(req.body.userId),
         discussionId: parseInt(req.body.discussionId),
-        parentId: req.body.parentId ? parseInt(req.body.parentId) : undefined,
-        imagePath: req.file ? `/uploads/${req.file.filename}` : undefined
+        parentId: req.body.parentId ? parseInt(req.body.parentId) : null,
+        imagePath: req.file ? `/uploads/${req.file.filename}` : null
       };
+      
+      console.log("Data prepared for validation:", data);
       
       const validatedData = insertReplySchema.parse(data);
       const reply = await storage.createReply(validatedData);
@@ -262,6 +279,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         childReplies: []
       });
     } catch (error) {
+      console.error("Error creating reply:", error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Invalid request" });
     }
   });
