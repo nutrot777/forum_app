@@ -3,7 +3,8 @@ import { UserProfile } from '@/components/UserProfile';
 import { Notifications } from '@/components/Notifications';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { BellIcon, UserIcon } from 'lucide-react';
+import { BellIcon, UserIcon, ArrowLeft } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
 import { useLocation } from 'wouter';
 
@@ -25,6 +26,16 @@ export default function Settings() {
 
   return (
     <div className="container max-w-4xl py-8">
+      <div className="mb-4">
+        <Button
+          variant="outline"
+          onClick={() => setLocation('/')}
+          className="flex items-center gap-2"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to Discussions
+        </Button>
+      </div>
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-2xl">Settings</CardTitle>

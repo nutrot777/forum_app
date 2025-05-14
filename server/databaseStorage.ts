@@ -6,6 +6,7 @@ import {
   discussions,
   replies,
   helpfulMarks,
+  notifications,
   type User,
   type InsertUser,
   type Discussion,
@@ -14,6 +15,9 @@ import {
   type InsertReply,
   type HelpfulMark,
   type InsertHelpfulMark,
+  type Notification,
+  type InsertNotification,
+  type NotificationWithUser,
   type DiscussionWithUser,
   type ReplyWithUser,
   type DiscussionWithDetails
@@ -426,5 +430,196 @@ export class DatabaseStorage implements IStorage {
       );
     
     return marks.length > 0;
+  }
+
+  // Update user data
+  async updateUser(id: number, userData: Partial<User>): Promise<User | undefined> {
+    const [user] = await db
+      .update(users)
+      .set(userData)
+      .where(eq(users.id, id))
+      .returning();
+    return user || undefined;
+  }
+
+  // Notification operations
+  async createNotification(notification: InsertNotification): Promise<Notification> {
+    const [newNotification] = await db
+      .insert(notifications)
+      .values({
+        ...notification,
+        discussionId: notification.discussionId || null,
+        replyId: notification.replyId || null,
+        isRead: false,
+        isEmailSent: false
+      })
+      .returning();
+    return newNotification;
+  }
+
+  async getNotifications(userId: number): Promise<NotificationWithUser[]> {
+    const allNotifications = await db
+      .select()
+      .from(notifications)
+      .where(eq(notifications.userId, userId))
+      .orderBy(desc(notifications.createdAt));
+    
+    const userIds = Array.from(new Set(allNotifications.map(n => n.triggeredByUserId)));
+    const discussionIds = Array.from(new Set(allNotifications.map(n => n.discussionId).filter(Boolean) as number[]));
+    const replyIds = Array.from(new Set(allNotifications.map(n => n.replyId).filter(Boolean) as number[]));
+    
+    // Get users
+    let notificationUsers: User[] = [];
+    if (userIds.length > 0) {
+      notificationUsers = await db
+        .select()
+        .from(users)
+        .where(inArray(users.id, userIds));
+    }
+    
+    // Get discussions
+    let relatedDiscussions: Discussion[] = [];
+    if (discussionIds.length > 0) {
+      relatedDiscussions = await db
+        .select()
+        .from(discussions)
+        .where(inArray(discussions.id, discussionIds));
+    }
+    
+    // Get replies
+    let relatedReplies: Reply[] = [];
+    if (replyIds.length > 0) {
+      relatedReplies = await db
+        .select()
+        .from(replies)
+        .where(inArray(replies.id, replyIds));
+    }
+    
+    // Build the result
+    const result: NotificationWithUser[] = [];
+    
+    for (const notification of allNotifications) {
+      const triggeredByUser = notificationUsers.find(u => u.id === notification.triggeredByUserId);
+      
+      if (triggeredByUser) {
+        const { password, ...userWithoutPassword } = triggeredByUser;
+        
+        // Find related discussion or reply if any
+        const discussion = notification.discussionId 
+          ? relatedDiscussions.find(d => d.id === notification.discussionId) 
+          : undefined;
+        
+        const reply = notification.replyId 
+          ? relatedReplies.find(r => r.id === notification.replyId) 
+          : undefined;
+        
+        result.push({
+          ...notification,
+          triggeredByUser: userWithoutPassword,
+          discussion,
+          reply
+        });
+      }
+    }
+    
+    return result;
+  }
+
+  async getNotification(id: number): Promise<Notification | undefined> {
+    const [notification] = await db
+      .select()
+      .from(notifications)
+      .where(eq(notifications.id, id));
+    return notification || undefined;
+  }
+
+  async markNotificationAsRead(id: number): Promise<Notification | undefined> {
+    const [notification] = await db
+      .update(notifications)
+      .set({ isRead: true })
+      .where(eq(notifications.id, id))
+      .returning();
+    return notification || undefined;
+  }
+
+  async markAllNotificationsAsRead(userId: number): Promise<boolean> {
+    const result = await db
+      .update(notifications)
+      .set({ isRead: true })
+      .where(eq(notifications.userId, userId))
+      .returning();
+    return result.length > 0;
+  }
+
+  async deleteNotification(id: number): Promise<boolean> {
+    const result = await db
+      .delete(notifications)
+      .where(eq(notifications.id, id))
+      .returning();
+    return result.length > 0;
+  }
+
+  async getUnreadNotificationsCount(userId: number): Promise<number> {
+    const result = await db
+      .select()
+      .from(notifications)
+      .where(and(
+        eq(notifications.userId, userId),
+        eq(notifications.isRead, false)
+      ));
+    return result.length;
+  }
+
+  async markNotificationEmailSent(id: number): Promise<boolean> {
+    const result = await db
+      .update(notifications)
+      .set({ isEmailSent: true })
+      .where(eq(notifications.id, id))
+      .returning();
+    return result.length > 0;
+  }
+
+  async getPendingEmailNotifications(): Promise<NotificationWithUser[]> {
+    const pendingNotifications = await db
+      .select()
+      .from(notifications)
+      .where(and(
+        eq(notifications.isEmailSent, false),
+        eq(notifications.isRead, false)
+      ));
+    
+    if (pendingNotifications.length === 0) {
+      return [];
+    }
+    
+    const userIds = Array.from(new Set([
+      ...pendingNotifications.map(n => n.triggeredByUserId),
+      ...pendingNotifications.map(n => n.userId)
+    ]));
+    
+    // Get all related users
+    const allUsers = await db
+      .select()
+      .from(users)
+      .where(inArray(users.id, userIds));
+    
+    // Build the result with user info
+    const result: NotificationWithUser[] = [];
+    
+    for (const notification of pendingNotifications) {
+      const triggeredByUser = allUsers.find(u => u.id === notification.triggeredByUserId);
+      const recipient = allUsers.find(u => u.id === notification.userId);
+      
+      if (triggeredByUser && recipient && recipient.email && recipient.emailNotifications) {
+        const { password: pw1, ...userWithoutPassword } = triggeredByUser;
+        
+        result.push({
+          ...notification,
+          triggeredByUser: userWithoutPassword
+        });
+      }
+    }
+    
+    return result;
   }
 }
