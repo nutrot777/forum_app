@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { DiscussionWithDetails } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { queryClient } from "@/lib/queryClient";
+import html2canvas from "html2canvas";
 import { 
   AlertDialog,
   AlertDialogAction,
@@ -36,6 +37,7 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({ discussion }) => {
   const [editTitle, setEditTitle] = useState(discussion.title);
   const [editContent, setEditContent] = useState(discussion.content);
   const [helpfulCount, setHelpfulCount] = useState(discussion.helpfulCount || 0);
+  const discussionRef = useRef<HTMLDivElement>(null);
 
   // Check if current user has marked this discussion as helpful
   const checkIfMarkedAsHelpful = async () => {
@@ -134,6 +136,77 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({ discussion }) => {
       });
     }
   };
+  
+  const handleShareDiscussion = async () => {
+    if (!discussionRef.current) return;
+    
+    try {
+      // Ensure replies are visible for screenshot
+      const wasHidden = !showReplies;
+      if (wasHidden) {
+        setShowReplies(true);
+      }
+      
+      // Allow the DOM to update with shown replies
+      setTimeout(async () => {
+        try {
+          // Capture the discussion element as an image
+          const canvas = await html2canvas(discussionRef.current!, {
+            scale: 2, // Higher quality
+            logging: false,
+            useCORS: true, // To handle images from other domains
+            backgroundColor: '#ffffff',
+          });
+          
+          // Convert canvas to blob
+          canvas.toBlob((blob) => {
+            if (!blob) {
+              throw new Error("Failed to create image");
+            }
+            
+            // Create download link
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.download = `discussion-${discussion.id}.png`;
+            link.href = url;
+            link.click();
+            
+            // Cleanup
+            URL.revokeObjectURL(url);
+            
+            // Restore previous state if needed
+            if (wasHidden) {
+              setShowReplies(false);
+            }
+            
+            toast({
+              title: "Success",
+              description: "Screenshot saved to your downloads",
+            });
+          }, 'image/png');
+        } catch (error) {
+          console.error("Screenshot error:", error);
+          toast({
+            title: "Error",
+            description: "Failed to take screenshot",
+            variant: "destructive",
+          });
+          
+          // Restore previous state if needed
+          if (wasHidden) {
+            setShowReplies(false);
+          }
+        }
+      }, 300); // Small delay to ensure DOM rendering completes
+    } catch (error) {
+      console.error("Share error:", error);
+      toast({
+        title: "Error",
+        description: "Failed to share discussion",
+        variant: "destructive",
+      });
+    }
+  };
 
   const createdAt = discussion.createdAt 
     ? formatDistanceToNow(new Date(discussion.createdAt), { addSuffix: true })
@@ -141,7 +214,7 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({ discussion }) => {
   const isOwner = user && user.id === discussion.userId;
 
   return (
-    <div className="bg-white rounded-lg shadow mb-4">
+    <div ref={discussionRef} className="bg-white rounded-lg shadow mb-4">
       <div className="p-4">
         <div className="flex items-start">
           <div className="flex flex-col items-center mr-4">
@@ -271,6 +344,7 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({ discussion }) => {
               <Button
                 variant="ghost"
                 className="flex items-center text-gray-600 hover:text-[#0079D3]"
+                onClick={handleShareDiscussion}
               >
                 <Share className="h-4 w-4 mr-1" />
                 <span>Share</span>
