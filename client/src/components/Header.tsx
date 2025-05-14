@@ -1,7 +1,7 @@
 import { Link } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
-import { Rows3 } from "lucide-react";
+import { Rows3, Settings } from "lucide-react";
 import UserSection from "./UserSection";
 
 const Header: React.FC = () => {
@@ -24,6 +24,16 @@ const Header: React.FC = () => {
         {user && (
           <div className="flex items-center space-x-4">
             <UserSection />
+            
+            <Link href="/settings">
+              <Button 
+                variant="ghost"
+                size="icon"
+                className="rounded-full text-gray-700 hover:bg-gray-100"
+              >
+                <Settings className="h-5 w-5" />
+              </Button>
+            </Link>
             
             <Button 
               className="rounded-full px-4 py-1.5 bg-[#0079D3] text-white text-sm font-medium hover:bg-[#0079D3]/90 transition-colors"

@@ -117,13 +117,13 @@ export function Notifications() {
   const { toast } = useToast();
 
   // Fetch all notifications
-  const { data: notifications, isLoading } = useQuery({
+  const { data: notifications, isLoading } = useQuery<NotificationType[]>({
     queryKey: ['/api/notifications'],
     enabled: !!user,
   });
 
   // Get unread count
-  const { data: unreadData } = useQuery({
+  const { data: unreadData } = useQuery<{ count: number }>({
     queryKey: ['/api/notifications/unread/count'],
     enabled: !!user,
   });
