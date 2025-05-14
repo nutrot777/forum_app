@@ -143,15 +143,20 @@ export class MemStorage implements IStorage {
     // Apply filters
     switch (filter) {
       case 'helpful':
-        return discussionsWithUsers.sort((a, b) => b.helpfulCount - a.helpfulCount);
+        return discussionsWithUsers.sort((a, b) => {
+          const aCount = a.helpfulCount || 0;
+          const bCount = b.helpfulCount || 0;
+          return bCount - aCount;
+        });
       case 'my':
         // This would normally filter by the current user, but we'll skip that for now
         return discussionsWithUsers;
       case 'recent':
       default:
-        return discussionsWithUsers.sort((a, b) => 
-          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-        );
+        return discussionsWithUsers.sort((a, b) => {
+          if (!a.createdAt || !b.createdAt) return 0;
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        });
     }
   }
 
@@ -371,13 +376,13 @@ export class MemStorage implements IStorage {
     if (markToDelete.discussionId) {
       const discussion = this.discussions.get(markToDelete.discussionId);
       if (discussion) {
-        discussion.helpfulCount = Math.max(0, discussion.helpfulCount - 1);
+        discussion.helpfulCount = Math.max(0, (discussion.helpfulCount || 0) - 1);
         this.discussions.set(discussion.id, discussion);
       }
     } else if (markToDelete.replyId) {
       const reply = this.replies.get(markToDelete.replyId);
       if (reply) {
-        reply.helpfulCount = Math.max(0, reply.helpfulCount - 1);
+        reply.helpfulCount = Math.max(0, (reply.helpfulCount || 0) - 1);
         this.replies.set(reply.id, reply);
       }
     }

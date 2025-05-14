@@ -25,11 +25,14 @@ export const replies = pgTable("replies", {
   content: text("content").notNull(),
   userId: integer("user_id").notNull().references(() => users.id),
   discussionId: integer("discussion_id").notNull().references(() => discussions.id),
-  parentId: integer("parent_id").references(() => replies.id),
+  parentId: integer("parent_id"),  // Self-reference handled later
   imagePath: text("image_path"),
   helpfulCount: integer("helpful_count").default(0),
   createdAt: timestamp("created_at").defaultNow(),
 });
+
+// For self-references in Drizzle, we just use the integer column
+// and handle the relationship in the application logic
 
 export const helpfulMarks = pgTable("helpful_marks", {
   id: serial("id").primaryKey(),
