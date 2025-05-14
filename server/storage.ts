@@ -3,6 +3,7 @@ import {
   discussions,
   replies,
   helpfulMarks,
+  notifications,
   type User,
   type InsertUser,
   type Discussion,
@@ -11,9 +12,12 @@ import {
   type InsertReply,
   type HelpfulMark,
   type InsertHelpfulMark,
+  type Notification,
+  type InsertNotification,
   type DiscussionWithUser,
   type ReplyWithUser,
-  type DiscussionWithDetails
+  type DiscussionWithDetails,
+  type NotificationWithUser
 } from "@shared/schema";
 
 export interface IStorage {
@@ -23,6 +27,7 @@ export interface IStorage {
   createUser(user: InsertUser): Promise<User>;
   updateUserOnlineStatus(id: number, isOnline: boolean): Promise<User | undefined>;
   getOnlineUsers(): Promise<number>;
+  updateUser(id: number, userData: Partial<User>): Promise<User | undefined>;
 
   // Discussion operations
   createDiscussion(discussion: InsertDiscussion): Promise<Discussion>;
@@ -42,6 +47,17 @@ export interface IStorage {
   markAsHelpful(mark: InsertHelpfulMark): Promise<HelpfulMark>;
   removeHelpfulMark(userId: number, discussionId?: number, replyId?: number): Promise<boolean>;
   isMarkedAsHelpful(userId: number, discussionId?: number, replyId?: number): Promise<boolean>;
+  
+  // Notifications
+  createNotification(notification: InsertNotification): Promise<Notification>;
+  getNotifications(userId: number): Promise<NotificationWithUser[]>;
+  getNotification(id: number): Promise<Notification | undefined>;
+  markNotificationAsRead(id: number): Promise<Notification | undefined>;
+  markAllNotificationsAsRead(userId: number): Promise<boolean>;
+  deleteNotification(id: number): Promise<boolean>;
+  getUnreadNotificationsCount(userId: number): Promise<number>;
+  markNotificationEmailSent(id: number): Promise<boolean>;
+  getPendingEmailNotifications(): Promise<NotificationWithUser[]>;
 }
 
 export class MemStorage implements IStorage {
@@ -49,20 +65,24 @@ export class MemStorage implements IStorage {
   private discussions: Map<number, Discussion>;
   private replies: Map<number, Reply>;
   private helpfulMarks: Map<number, HelpfulMark>;
+  private notifications: Map<number, Notification>;
   private userIdCounter: number;
   private discussionIdCounter: number;
   private replyIdCounter: number;
   private helpfulIdCounter: number;
+  private notificationIdCounter: number;
 
   constructor() {
     this.users = new Map();
     this.discussions = new Map();
     this.replies = new Map();
     this.helpfulMarks = new Map();
+    this.notifications = new Map();
     this.userIdCounter = 1;
     this.discussionIdCounter = 1;
     this.replyIdCounter = 1;
     this.helpfulIdCounter = 1;
+    this.notificationIdCounter = 1;
 
     // Add some initial users for testing
     this.createUser({ username: "emma", password: "password123" });
@@ -399,6 +419,175 @@ export class MemStorage implements IStorage {
         mark.discussionId === discussionId &&
         mark.replyId === replyId
     );
+  }
+
+  // User profile updates
+  async updateUser(id: number, userData: Partial<User>): Promise<User | undefined> {
+    const user = this.users.get(id);
+    if (!user) {
+      return undefined;
+    }
+
+    const updatedUser: User = {
+      ...user,
+      ...userData,
+    };
+
+    this.users.set(id, updatedUser);
+    return updatedUser;
+  }
+  
+  // Notification methods
+  async createNotification(notification: InsertNotification): Promise<Notification> {
+    const id = this.notificationIdCounter++;
+    const now = new Date();
+    
+    const newNotification: Notification = {
+      id,
+      userId: notification.userId,
+      triggeredByUserId: notification.triggeredByUserId,
+      discussionId: notification.discussionId ?? null,
+      replyId: notification.replyId ?? null,
+      type: notification.type,
+      message: notification.message,
+      isRead: false,
+      emailSent: false,
+      createdAt: now,
+    };
+    
+    this.notifications.set(id, newNotification);
+    return newNotification;
+  }
+  
+  async getNotifications(userId: number): Promise<NotificationWithUser[]> {
+    const userNotifications = Array.from(this.notifications.values())
+      .filter(notification => notification.userId === userId)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    
+    const result: NotificationWithUser[] = [];
+    
+    for (const notification of userNotifications) {
+      const triggeredByUser = this.users.get(notification.triggeredByUserId);
+      if (!triggeredByUser) continue;
+      
+      const { password, ...userWithoutPassword } = triggeredByUser;
+      
+      let discussion: Discussion | undefined;
+      if (notification.discussionId) {
+        discussion = this.discussions.get(notification.discussionId);
+      }
+      
+      let reply: Reply | undefined;
+      if (notification.replyId) {
+        reply = this.replies.get(notification.replyId);
+      }
+      
+      result.push({
+        ...notification,
+        triggeredByUser: userWithoutPassword,
+        discussion,
+        reply,
+      });
+    }
+    
+    return result;
+  }
+  
+  async getNotification(id: number): Promise<Notification | undefined> {
+    return this.notifications.get(id);
+  }
+  
+  async markNotificationAsRead(id: number): Promise<Notification | undefined> {
+    const notification = this.notifications.get(id);
+    if (!notification) {
+      return undefined;
+    }
+    
+    const updatedNotification: Notification = {
+      ...notification,
+      isRead: true,
+    };
+    
+    this.notifications.set(id, updatedNotification);
+    return updatedNotification;
+  }
+  
+  async markAllNotificationsAsRead(userId: number): Promise<boolean> {
+    const userNotifications = Array.from(this.notifications.values())
+      .filter(notification => notification.userId === userId);
+    
+    if (userNotifications.length === 0) {
+      return false;
+    }
+    
+    for (const notification of userNotifications) {
+      this.notifications.set(notification.id, {
+        ...notification,
+        isRead: true,
+      });
+    }
+    
+    return true;
+  }
+  
+  async deleteNotification(id: number): Promise<boolean> {
+    return this.notifications.delete(id);
+  }
+  
+  async getUnreadNotificationsCount(userId: number): Promise<number> {
+    return Array.from(this.notifications.values())
+      .filter(notification => notification.userId === userId && !notification.isRead)
+      .length;
+  }
+  
+  async markNotificationEmailSent(id: number): Promise<boolean> {
+    const notification = this.notifications.get(id);
+    if (!notification) {
+      return false;
+    }
+    
+    this.notifications.set(id, {
+      ...notification,
+      emailSent: true,
+    });
+    
+    return true;
+  }
+  
+  async getPendingEmailNotifications(): Promise<NotificationWithUser[]> {
+    const pendingNotifications = Array.from(this.notifications.values())
+      .filter(notification => !notification.emailSent)
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+    
+    const result: NotificationWithUser[] = [];
+    
+    for (const notification of pendingNotifications) {
+      const user = this.users.get(notification.userId);
+      const triggeredByUser = this.users.get(notification.triggeredByUserId);
+      
+      if (!user || !triggeredByUser || !user.email) continue;
+      
+      const { password: _, ...userWithoutPassword } = triggeredByUser;
+      
+      let discussion: Discussion | undefined;
+      if (notification.discussionId) {
+        discussion = this.discussions.get(notification.discussionId);
+      }
+      
+      let reply: Reply | undefined;
+      if (notification.replyId) {
+        reply = this.replies.get(notification.replyId);
+      }
+      
+      result.push({
+        ...notification,
+        triggeredByUser: userWithoutPassword,
+        discussion,
+        reply,
+      });
+    }
+    
+    return result;
   }
 }
 

@@ -1,6 +1,7 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import { addEmailColumnsToUsers, createNotificationsTable } from "./migrations/addEmailToUsers";
 
 const app = express();
 app.use(express.json());
@@ -37,6 +38,16 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Run migrations
+  try {
+    log("Running database migrations...");
+    await addEmailColumnsToUsers();
+    await createNotificationsTable();
+    log("Migrations completed successfully");
+  } catch (err) {
+    log("Error running migrations: " + (err as Error).message);
+  }
+
   const server = await registerRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {

@@ -6,8 +6,10 @@ export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
+  email: text("email"),
   isOnline: boolean("is_online").default(false),
   lastSeen: timestamp("last_seen").defaultNow(),
+  emailNotifications: boolean("email_notifications").default(true),
 });
 
 export const discussions = pgTable("discussions", {
@@ -42,10 +44,28 @@ export const helpfulMarks = pgTable("helpful_marks", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const notifications = pgTable("notifications", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id),
+  triggeredByUserId: integer("triggered_by_user_id").notNull().references(() => users.id),
+  discussionId: integer("discussion_id").references(() => discussions.id),
+  replyId: integer("reply_id").references(() => replies.id),
+  type: text("type").notNull(), // "reply" or "helpful"
+  message: text("message").notNull(),
+  isRead: boolean("is_read").default(false),
+  emailSent: boolean("email_sent").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
   password: true,
+  email: true,
+  emailNotifications: true,
+}).extend({
+  email: z.string().email().nullable().optional(),
+  emailNotifications: z.boolean().optional(),
 });
 
 export const insertDiscussionSchema = createInsertSchema(discussions)
@@ -83,6 +103,20 @@ export const insertHelpfulMarkSchema = createInsertSchema(helpfulMarks)
     replyId: z.number().nullable().optional(),
   });
 
+export const insertNotificationSchema = createInsertSchema(notifications)
+  .pick({
+    userId: true,
+    triggeredByUserId: true,
+    discussionId: true,
+    replyId: true,
+    type: true,
+    message: true,
+  })
+  .extend({
+    discussionId: z.number().nullable().optional(),
+    replyId: z.number().nullable().optional(),
+  });
+
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -96,6 +130,9 @@ export type InsertReply = z.infer<typeof insertReplySchema>;
 export type HelpfulMark = typeof helpfulMarks.$inferSelect;
 export type InsertHelpfulMark = z.infer<typeof insertHelpfulMarkSchema>;
 
+export type Notification = typeof notifications.$inferSelect;
+export type InsertNotification = z.infer<typeof insertNotificationSchema>;
+
 // Extended Types for API responses
 export type DiscussionWithUser = Discussion & {
   user: Omit<User, 'password'>;
@@ -108,4 +145,10 @@ export type ReplyWithUser = Reply & {
 
 export type DiscussionWithDetails = DiscussionWithUser & {
   replies: ReplyWithUser[];
+};
+
+export type NotificationWithUser = Notification & {
+  triggeredByUser: Omit<User, 'password'>;
+  discussion?: Discussion;
+  reply?: Reply;
 };
