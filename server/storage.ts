@@ -118,7 +118,8 @@ export class MemStorage implements IStorage {
       ...insertDiscussion,
       id,
       helpfulCount: 0,
-      createdAt: new Date()
+      createdAt: new Date(),
+      imagePath: insertDiscussion.imagePath || null
     };
     this.discussions.set(id, discussion);
     return discussion;
@@ -211,7 +212,9 @@ export class MemStorage implements IStorage {
       ...insertReply,
       id,
       helpfulCount: 0,
-      createdAt: new Date()
+      createdAt: new Date(),
+      imagePath: insertReply.imagePath || null,
+      parentId: insertReply.parentId || null
     };
     this.replies.set(id, reply);
     return reply;
@@ -330,7 +333,9 @@ export class MemStorage implements IStorage {
     const mark: HelpfulMark = {
       ...insertMark,
       id,
-      createdAt: new Date()
+      createdAt: new Date(),
+      discussionId: insertMark.discussionId || null,
+      replyId: insertMark.replyId || null
     };
     this.helpfulMarks.set(id, mark);
 
@@ -338,13 +343,13 @@ export class MemStorage implements IStorage {
     if (insertMark.discussionId) {
       const discussion = this.discussions.get(insertMark.discussionId);
       if (discussion) {
-        discussion.helpfulCount += 1;
+        discussion.helpfulCount = (discussion.helpfulCount || 0) + 1;
         this.discussions.set(discussion.id, discussion);
       }
     } else if (insertMark.replyId) {
       const reply = this.replies.get(insertMark.replyId);
       if (reply) {
-        reply.helpfulCount += 1;
+        reply.helpfulCount = (reply.helpfulCount || 0) + 1;
         this.replies.set(reply.id, reply);
       }
     }

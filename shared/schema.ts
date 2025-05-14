@@ -69,11 +69,16 @@ export const insertReplySchema = createInsertSchema(replies)
     parentId: z.number().nullable().optional(),
   });
 
-export const insertHelpfulMarkSchema = createInsertSchema(helpfulMarks).pick({
-  userId: true,
-  discussionId: true,
-  replyId: true,
-});
+export const insertHelpfulMarkSchema = createInsertSchema(helpfulMarks)
+  .pick({
+    userId: true,
+    discussionId: true,
+    replyId: true,
+  })
+  .extend({
+    discussionId: z.number().nullable().optional(),
+    replyId: z.number().nullable().optional(),
+  });
 
 // Types
 export type User = typeof users.$inferSelect;
