@@ -30,9 +30,9 @@ interface RepliesProps {
 const Replies: React.FC<RepliesProps> = ({ discussionId, replies }) => {
   return (
     <div className="border-t border-gray-100 px-4 py-3 bg-gray-50 rounded-b-lg">
-      <h4 className="font-ibm font-medium text-sm mb-2">Replies ({replies.length})</h4>
+      <h4 className="font-ibm font-medium text-sm mb-2">Replies ({replies?.length || 0})</h4>
       
-      {replies.map((reply) => (
+      {replies?.map((reply) => (
         <ReplyItem 
           key={reply.id} 
           reply={reply} 
@@ -87,13 +87,13 @@ const ReplyItem: React.FC<ReplyItemProps> = ({ reply, discussionId, depth = 0 })
           userId: user.id,
           replyId: reply.id
         });
-        setHelpfulCount(prev => Math.max(0, prev - 1));
+        setHelpfulCount(prev => Math.max(0, (prev || 0) - 1));
       } else {
         await apiRequest("POST", "/api/helpful", {
           userId: user.id,
           replyId: reply.id
         });
-        setHelpfulCount(prev => prev + 1);
+        setHelpfulCount(prev => (prev || 0) + 1);
       }
       setIsMarked(!isMarked);
     } catch (error) {
@@ -277,9 +277,9 @@ const ReplyItem: React.FC<ReplyItemProps> = ({ reply, discussionId, depth = 0 })
       </div>
       
       {/* Child replies */}
-      {reply.childReplies && reply.childReplies.length > 0 && (
+      {reply.childReplies && reply.childReplies?.length > 0 && (
         <div className="mt-3">
-          {reply.childReplies.map((childReply) => (
+          {reply.childReplies?.map((childReply) => (
             <ReplyItem
               key={childReply.id}
               reply={childReply}

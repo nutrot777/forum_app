@@ -256,9 +256,10 @@ export class MemStorage implements IStorage {
       }
     }
     
-    return repliesWithUsers.sort((a, b) => 
-      new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-    );
+    return repliesWithUsers.sort((a, b) => {
+      if (!a.createdAt || !b.createdAt) return 0;
+      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+    });
   }
   
   private async getChildReplies(parentId: number, allReplies: Reply[]): Promise<ReplyWithUser[]> {
@@ -282,9 +283,10 @@ export class MemStorage implements IStorage {
       }
     }
     
-    return childRepliesWithUsers.sort((a, b) => 
-      new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-    );
+    return childRepliesWithUsers.sort((a, b) => {
+      if (!a.createdAt || !b.createdAt) return 0;
+      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+    });
   }
 
   async updateReply(id: number, partialReply: Partial<InsertReply>): Promise<Reply | undefined> {
