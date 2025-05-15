@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { ArrowUp, ArrowDown, MessageSquare, Bookmark, Share, Edit, Trash2 } from "lucide-react";
+import { ArrowUp, MessageSquare, Bookmark, Share, Edit, Trash2 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import Replies from "./Replies";
 import { DiscussionWithDetails } from "@shared/schema";
@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
+import { useQuery } from "@tanstack/react-query";
 
 interface DiscussionThreadProps {
   discussion: DiscussionWithDetails;
@@ -36,8 +37,25 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({ discussion }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(discussion.title);
   const [editContent, setEditContent] = useState(discussion.content);
-  const [helpfulCount, setHelpfulCount] = useState(discussion.helpfulCount || 0);
+  const [isBookmarked, setIsBookmarked] = useState(false);
   const discussionRef = useRef<HTMLDivElement>(null);
+
+  // Add logging to debug the `discussion` object
+  useEffect(() => {
+    console.log("Discussion object in DiscussionThread:", discussion);
+  }, [discussion]);
+
+  // Add query for discussion details (to get latest replies)
+  const { data: discussionData, refetch } = useQuery({
+    queryKey: ["/api/discussions/" + discussion.id],
+    queryFn: async () => {
+      const res = await fetch(`/api/discussions/${discussion.id}`);
+      if (!res.ok) throw new Error("Failed to fetch discussion");
+      return res.json();
+    },
+    initialData: discussion,
+    refetchInterval: 2000, // Poll every 2 seconds for new upvotes/downvotes
+  });
 
   // Check if current user has marked this discussion as helpful
   const checkIfMarkedAsHelpful = async () => {
@@ -52,35 +70,72 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({ discussion }) => {
     }
   };
 
+  // Check if current user has bookmarked this discussion
+  useEffect(() => {
+    const checkBookmark = async () => {
+      if (!user) return;
+      try {
+        const response = await fetch(
+          `/api/bookmarks/check?userId=${user.id}&discussionId=${discussion.id}`
+        );
+        const data = await response.json();
+        setIsBookmarked(data.isBookmarked);
+      } catch (error) {
+        console.error("Failed to check bookmark status:", error);
+      }
+    };
+    checkBookmark();
+  }, [user, discussion.id]);
+
   // Run on component mount
   useEffect(() => {
     checkIfMarkedAsHelpful();
-  }, []);
+  }, [user, discussion.id]);
 
   const handleToggleHelpful = async () => {
     if (!user) return;
-    
     try {
       if (isMarked) {
         await apiRequest("DELETE", "/api/helpful", {
           userId: user.id,
-          discussionId: discussion.id
+          discussionId: discussion.id,
+          type: "upvote"
         });
-        setHelpfulCount(prev => Math.max(0, (prev || 0) - 1));
       } else {
         await apiRequest("POST", "/api/helpful", {
           userId: user.id,
-          discussionId: discussion.id
+          discussionId: discussion.id,
+          type: "upvote"
         });
-        setHelpfulCount(prev => (prev || 0) + 1);
       }
-      setIsMarked(!isMarked);
+      await checkIfMarkedAsHelpful(); // Ensure arrow color updates correctly
+      refetch();
     } catch (error) {
       toast({
         title: "Error",
         description: error instanceof Error ? error.message : "Failed to mark as helpful",
         variant: "destructive",
       });
+    }
+  };
+
+  const toggleBookmark = async () => {
+    if (!user) return;
+    try {
+      if (isBookmarked) {
+        await apiRequest("DELETE", "/api/bookmarks", {
+          userId: user.id,
+          discussionId: discussion.id,
+        });
+      } else {
+        await apiRequest("POST", "/api/bookmarks", {
+          userId: user.id,
+          discussionId: discussion.id,
+        });
+      }
+      setIsBookmarked(!isBookmarked);
+    } catch (error) {
+      console.error("Failed to toggle bookmark:", error);
     }
   };
 
@@ -221,21 +276,12 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({ discussion }) => {
             <Button
               variant="ghost"
               size="sm"
-              className={`text-gray-400 hover:text-[#FF4500] ${isMarked ? 'text-[#FF4500]' : ''}`}
               aria-label="Mark as helpful"
               onClick={handleToggleHelpful}
             >
-              <ArrowUp className="h-6 w-6" />
+              <ArrowUp className={`h-6 w-6 text-gray-400 hover:text-[#FF4500] ${isMarked ? 'text-[#FF4500]' : ''}`} />
             </Button>
-            <span className="text-sm font-medium">{helpfulCount}</span>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-gray-400 hover:text-gray-600"
-              aria-label="Mark as not helpful"
-            >
-              <ArrowDown className="h-6 w-6" />
-            </Button>
+            <span className="text-sm font-medium">{discussionData.helpfulCount || 0}</span>
           </div>
           
           <div className="flex-1">
@@ -300,10 +346,15 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({ discussion }) => {
                 
                 <div className="flex items-center space-x-2 mb-3 text-sm text-gray-600">
                   <Avatar className="w-5 h-5">
-                    <AvatarImage src={`https://ui-avatars.com/api/?name=${discussion.user.username}&background=random`} alt={discussion.user.username} />
-                    <AvatarFallback>{discussion.user.username.charAt(0).toUpperCase()}</AvatarFallback>
+                    <AvatarImage
+                      src={`https://ui-avatars.com/api/?name=${discussion.user?.username || "Unknown"}&background=random`}
+                      alt={discussion.user?.username || "Unknown"}
+                    />
+                    <AvatarFallback>
+                      {discussion.user?.username?.charAt(0).toUpperCase() || "U"}
+                    </AvatarFallback>
                   </Avatar>
-                  <span className="font-medium">{discussion.user.username}</span>
+                  <span className="font-medium">{discussion.user?.username || "Unknown"}</span>
                   {isOwner && (
                     <span className="bg-[#0079D3]/10 text-[#0079D3] text-xs px-1.5 py-0.5 rounded">You</span>
                   )}
@@ -328,17 +379,20 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({ discussion }) => {
             <div className="flex items-center space-x-4 text-sm">
               <Button
                 variant="ghost"
-                className="flex items-center text-gray-600 hover:text-[#0079D3]"
+                className={`flex items-center transition-colors ${showReplies ? 'text-[#0079D3] font-semibold' : 'text-gray-600'} hover:text-[#0079D3]`}
                 onClick={() => setShowReplies(!showReplies)}
               >
                 <MessageSquare className="h-4 w-4 mr-1" />
-                <span>Reply ({discussion.replies?.length || 0})</span>
+                <span>Show Replies{typeof discussionData.replies === 'object' ? ` (${discussionData.replies.length})` : ''}</span>
               </Button>
               <Button
                 variant="ghost"
                 className="flex items-center text-gray-600 hover:text-[#0079D3]"
+                onClick={toggleBookmark}
               >
-                <Bookmark className="h-4 w-4 mr-1" />
+                <Bookmark
+                  className={`h-4 w-4 mr-1 ${isBookmarked ? 'fill-current text-[#0079D3]' : ''}`}
+                />
                 <span>Save</span>
               </Button>
               <Button
@@ -354,10 +408,11 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({ discussion }) => {
         </div>
       </div>
       
-      {discussion.replies?.length > 0 && showReplies && (
+      {showReplies && (
         <Replies 
           discussionId={discussion.id} 
-          replies={discussion.replies} 
+          replies={discussionData.replies || []} 
+          onReplySuccess={refetch}
         />
       )}
       

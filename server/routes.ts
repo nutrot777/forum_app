@@ -2,6 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import express from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import session from "express-session"; // Add session middleware
 import { 
   insertUserSchema, 
   insertDiscussionSchema, 
@@ -51,6 +52,15 @@ const clients = new Map<string, { userId: number; lastSeen: Date }>();
 
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
+
+  // Ensure session middleware is used
+  app.use(
+    session({
+      secret: "your-secret-key", // Replace with a secure secret key
+      resave: false,
+      saveUninitialized: true,
+    })
+  );
 
   // Temporarily disable WebSocket for troubleshooting
   console.log("WebSocket functionality is temporarily disabled for troubleshooting");
@@ -435,20 +445,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Helpful mark routes
   app.post("/api/helpful", async (req: Request, res: Response) => {
     try {
-      const { userId, discussionId, replyId } = req.body;
+      const { userId, discussionId, replyId, type } = req.body; // type: 'upvote' | 'downvote'
       
-      if (!userId || (!discussionId && !replyId)) {
+      if (!userId || (!discussionId && !replyId) || !type) {
         return res.status(400).json({ message: "Invalid request parameters" });
       }
       
       const data = {
         userId: parseInt(userId),
         discussionId: discussionId ? parseInt(discussionId) : undefined,
-        replyId: replyId ? parseInt(replyId) : undefined
+        replyId: replyId ? parseInt(replyId) : undefined,
+        type
       };
       
-      const validatedData = insertHelpfulMarkSchema.parse(data);
-      const mark = await storage.markAsHelpful(validatedData);
+      const mark = await storage.markAsHelpful(data);
       
       // Get the user who marked as helpful
       const markingUser = await storage.getUser(parseInt(userId));
@@ -547,16 +557,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/helpful", async (req: Request, res: Response) => {
     try {
-      const { userId, discussionId, replyId } = req.body;
+      const { userId, discussionId, replyId, type } = req.body;
       
-      if (!userId || (!discussionId && !replyId)) {
+      if (!userId || (!discussionId && !replyId) || !type) {
         return res.status(400).json({ message: "Invalid request parameters" });
       }
       
       const result = await storage.removeHelpfulMark(
         parseInt(userId),
         discussionId ? parseInt(discussionId) : undefined,
-        replyId ? parseInt(replyId) : undefined
+        replyId ? parseInt(replyId) : undefined,
+        type
       );
       
       if (!result) {
@@ -586,6 +597,90 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(200).json({ isMarked });
     } catch (error) {
       res.status(400).json({ message: error instanceof Error ? error.message : "Invalid request" });
+    }
+  });
+
+  // Bookmark routes
+  app.post("/api/bookmarks", async (req: Request, res: Response) => {
+    try {
+      const { userId, discussionId } = req.body;
+
+      if (!userId || !discussionId) {
+        return res.status(400).json({ message: "Invalid request parameters" });
+      }
+
+      console.log("Checking if addBookmark exists on storage:", typeof storage.addBookmark);
+
+      const bookmark = await storage.addBookmark({
+        userId: parseInt(userId),
+        discussionId: parseInt(discussionId),
+      });
+
+      res.status(201).json(bookmark);
+    } catch (error) {
+      console.error("Error in /api/bookmarks endpoint:", error);
+      res.status(500).json({ message: error instanceof Error ? error.message : "Server error" });
+    }
+  });
+
+  app.delete("/api/bookmarks", async (req: Request, res: Response) => {
+    try {
+      const { userId, discussionId } = req.body;
+
+      if (!userId || !discussionId) {
+        return res.status(400).json({ message: "Invalid request parameters" });
+      }
+
+      const result = await storage.removeBookmark(
+        parseInt(userId),
+        parseInt(discussionId)
+      );
+
+      if (!result) {
+        return res.status(404).json({ message: "Bookmark not found" });
+      }
+
+      res.status(200).json({ message: "Bookmark removed successfully" });
+    } catch (error) {
+      res.status(400).json({ message: error instanceof Error ? error.message : "Invalid request" });
+    }
+  });
+
+  app.get("/api/bookmarks/check", async (req: Request, res: Response) => {
+    try {
+      const { userId, discussionId } = req.query;
+
+      if (!userId || !discussionId) {
+        return res.status(400).json({ message: "Invalid request parameters" });
+      }
+
+      const isBookmarked = await storage.isBookmarked(
+        parseInt(userId as string),
+        parseInt(discussionId as string)
+      );
+
+      res.status(200).json({ isBookmarked });
+    } catch (error) {
+      res.status(400).json({ message: error instanceof Error ? error.message : "Invalid request" });
+    }
+  });
+
+  app.get("/api/bookmarks", async (req: Request, res: Response) => {
+    try {
+      const { userId } = req.query;
+
+      if (!userId) {
+        return res.status(400).json({ message: "User ID is required" });
+      }
+
+      console.log("Checking if getBookmarkedDiscussions exists on storage:", typeof storage.getBookmarkedDiscussions);
+
+      const bookmarkedDiscussions = await storage.getBookmarkedDiscussions(parseInt(userId as string));
+
+      res.status(200).json(bookmarkedDiscussions);
+    } catch (error) {
+      console.error("Error in /api/bookmarks endpoint:", error);
+      res.status(500).json({ message: error instanceof Error ? error.message : "Server error" });
     }
   });
 

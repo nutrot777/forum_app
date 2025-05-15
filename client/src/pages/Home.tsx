@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import CreatePost from "@/components/CreatePost";
 import FilterOptions from "@/components/FilterOptions";
@@ -12,18 +12,34 @@ const Home = () => {
   const { user } = useAuth();
   const [filter, setFilter] = useState("recent");
   const [limit, setLimit] = useState(5);
-  
-  const { data: discussions, isLoading, error } = useQuery<DiscussionWithDetails[]>({
-    queryKey: ["/api/discussions", filter],
-    queryFn: async () => {
-      const response = await fetch(`/api/discussions?filter=${filter}`);
-      if (!response.ok) {
-        throw new Error("Failed to fetch discussions");
+  const [discussions, setDiscussions] = useState<DiscussionWithDetails[] | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    const fetchDiscussions = async () => {
+      setIsLoading(true);
+      try {
+        let url = "/api/discussions";
+        if (filter === "bookmarks") {
+          url = `/api/bookmarks?userId=${user?.id}`;
+        }
+        const response = await fetch(url);
+        const data = await response.json();
+        setDiscussions(data);
+      } catch (error) {
+        console.error("Failed to fetch discussions:", error);
+        setError(true);
+      } finally {
+        setIsLoading(false);
       }
-      return response.json();
+    };
+
+    if (user) {
+      fetchDiscussions();
     }
-  });
-  
+  }, [filter, user]);
+
   if (!user) {
     return null;
   }
@@ -32,9 +48,11 @@ const Home = () => {
     setLimit(prev => prev + 5);
   };
   
-  const filteredDiscussions = filter === "my" && discussions
-    ? discussions.filter(discussion => discussion.userId === user.id)
-    : discussions;
+  const filteredDiscussions = Array.isArray(discussions)
+    ? (filter === "my"
+        ? discussions.filter(discussion => discussion.userId === user.id)
+        : discussions)
+    : [];
   
   const limitedDiscussions = filteredDiscussions
     ? filteredDiscussions.slice(0, limit)

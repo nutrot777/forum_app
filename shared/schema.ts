@@ -19,6 +19,8 @@ export const discussions = pgTable("discussions", {
   userId: integer("user_id").notNull().references(() => users.id),
   imagePath: text("image_path"),
   helpfulCount: integer("helpful_count").default(0),
+  upvoteCount: integer("upvote_count").default(0),
+  //downvoteCount: integer("downvote_count").default(0),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -30,6 +32,8 @@ export const replies = pgTable("replies", {
   parentId: integer("parent_id"),  // Self-reference handled later
   imagePath: text("image_path"),
   helpfulCount: integer("helpful_count").default(0),
+  upvoteCount: integer("upvote_count").default(0),
+  downvoteCount: integer("downvote_count").default(0),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -41,6 +45,7 @@ export const helpfulMarks = pgTable("helpful_marks", {
   userId: integer("user_id").notNull().references(() => users.id),
   discussionId: integer("discussion_id").references(() => discussions.id),
   replyId: integer("reply_id").references(() => replies.id),
+  type: text("type").notNull(), // 'upvote' or 'downvote'
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -54,6 +59,13 @@ export const notifications = pgTable("notifications", {
   message: text("message").notNull(),
   isRead: boolean("is_read").default(false),
   emailSent: boolean("email_sent").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const bookmarks = pgTable("bookmarks", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id),
+  discussionId: integer("discussion_id").notNull().references(() => discussions.id),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -97,10 +109,12 @@ export const insertHelpfulMarkSchema = createInsertSchema(helpfulMarks)
     userId: true,
     discussionId: true,
     replyId: true,
+    type: true,
   })
   .extend({
     discussionId: z.number().nullable().optional(),
     replyId: z.number().nullable().optional(),
+    type: z.enum(["upvote", "downvote"]),
   });
 
 export const insertNotificationSchema = createInsertSchema(notifications)
@@ -115,6 +129,12 @@ export const insertNotificationSchema = createInsertSchema(notifications)
   .extend({
     discussionId: z.number().nullable().optional(),
     replyId: z.number().nullable().optional(),
+  });
+
+export const insertBookmarkSchema = createInsertSchema(bookmarks)
+  .pick({
+    userId: true,
+    discussionId: true,
   });
 
 // Types
@@ -132,6 +152,9 @@ export type InsertHelpfulMark = z.infer<typeof insertHelpfulMarkSchema>;
 
 export type Notification = typeof notifications.$inferSelect;
 export type InsertNotification = z.infer<typeof insertNotificationSchema>;
+
+export type Bookmark = typeof bookmarks.$inferSelect;
+export type InsertBookmark = z.infer<typeof insertBookmarkSchema>;
 
 // Extended Types for API responses
 export type DiscussionWithUser = Discussion & {

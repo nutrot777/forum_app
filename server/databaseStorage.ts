@@ -7,6 +7,7 @@ import {
   replies,
   helpfulMarks,
   notifications,
+  bookmarks,
   type User,
   type InsertUser,
   type Discussion,
@@ -78,10 +79,11 @@ export class DatabaseStorage implements IStorage {
     return discussion;
   }
 
+  // Add logging to debug the `user` field in discussions
   async getDiscussions(filter: string = 'recent'): Promise<DiscussionWithUser[]> {
     const allDiscussions = await db.select().from(discussions);
     const userIds = Array.from(new Set(allDiscussions.map(d => d.userId)));
-    
+
     let allUsers: User[] = [];
     if (userIds.length > 0) {
       allUsers = await db
@@ -89,20 +91,24 @@ export class DatabaseStorage implements IStorage {
         .from(users)
         .where(inArray(users.id, userIds));
     }
-    
+
     const discussionsWithUsers: DiscussionWithUser[] = [];
-    
+
     for (const discussion of allDiscussions) {
       const user = allUsers.find(u => u.id === discussion.userId);
       if (user) {
         const { password, ...userWithoutPassword } = user;
         discussionsWithUsers.push({
           ...discussion,
-          user: userWithoutPassword
+          user: userWithoutPassword,
         });
+      } else {
+        console.warn("User not found for discussion:", discussion);
       }
     }
-    
+
+    console.log("Discussions with users:", discussionsWithUsers);
+
     if (filter === 'helpful') {
       discussionsWithUsers.sort((a, b) => {
         const aCount = a.helpfulCount || 0;
@@ -118,7 +124,7 @@ export class DatabaseStorage implements IStorage {
         return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
       });
     }
-    
+
     return discussionsWithUsers;
   }
 
@@ -621,5 +627,47 @@ export class DatabaseStorage implements IStorage {
     }
     
     return result;
+  }
+
+  // Ensure the `user` details are included in the response
+  async getBookmarkedDiscussions(userId: number) {
+    console.log("getBookmarkedDiscussions called with userId:", userId);
+    console.log("Checking db object:", db);
+
+    try {
+      const result = await db
+        .select()
+        .from(discussions)
+        .innerJoin(bookmarks, eq(discussions.id, bookmarks.discussionId))
+        .innerJoin(users, eq(discussions.userId, users.id))
+        .where(eq(bookmarks.userId, userId));
+
+      console.log("Query result with users:", result);
+      return result.map(({ discussions, users, bookmarks }) => ({
+        ...discussions,
+        user: users,
+        bookmark: bookmarks,
+      }));
+    } catch (error) {
+      console.error("Error executing getBookmarkedDiscussions query:", error);
+      throw error;
+    }
+  }
+
+  // Update the `addBookmark` method to use `sql` for parameterized queries
+  async addBookmark({ userId, discussionId }: { userId: number; discussionId: number }) {
+    console.log("addBookmark called with:", { userId, discussionId });
+    console.log("Checking if db is defined:", typeof db);
+
+    try {
+      const result = await db.execute(
+        sql`INSERT INTO bookmarks (user_id, discussion_id) VALUES (${userId}, ${discussionId}) RETURNING *`
+      );
+      console.log("Query result:", result);
+      return result[0];
+    } catch (error) {
+      console.error("Error executing addBookmark query:", error);
+      throw error;
+    }
   }
 }

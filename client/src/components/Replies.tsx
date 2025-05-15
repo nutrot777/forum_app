@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { ThumbsUp, Edit, Trash2 } from "lucide-react";
+import { ThumbsUp, Edit, Trash2, Bookmark } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import ReplyForm from "./ReplyForm";
 import { useToast } from "@/hooks/use-toast";
@@ -25,22 +25,23 @@ import { Textarea } from "@/components/ui/textarea";
 interface RepliesProps {
   discussionId: number;
   replies: ReplyWithUser[];
+  onReplySuccess?: () => void;
 }
 
-const Replies: React.FC<RepliesProps> = ({ discussionId, replies }) => {
+const Replies: React.FC<RepliesProps> = ({ discussionId, replies, onReplySuccess }) => {
   return (
     <div className="border-t border-gray-100 px-4 py-3 bg-gray-50 rounded-b-lg">
       <h4 className="font-ibm font-medium text-sm mb-2">Replies ({replies?.length || 0})</h4>
-      
-      {replies?.map((reply) => (
+      {replies && replies.length > 0 && replies.map((reply) => (
         <ReplyItem 
           key={reply.id} 
           reply={reply} 
           discussionId={discussionId} 
+          depth={0}
+          onReplySuccess={onReplySuccess}
         />
       ))}
-      
-      <ReplyForm discussionId={discussionId} />
+      <ReplyForm discussionId={discussionId} onSuccess={onReplySuccess} />
     </div>
   );
 };
@@ -49,9 +50,10 @@ interface ReplyItemProps {
   reply: ReplyWithUser;
   discussionId: number;
   depth?: number;
+  onReplySuccess?: () => void;
 }
 
-const ReplyItem: React.FC<ReplyItemProps> = ({ reply, discussionId, depth = 0 }) => {
+const ReplyItem: React.FC<ReplyItemProps> = ({ reply, discussionId, depth = 0, onReplySuccess }) => {
   const { user } = useAuth();
   const { toast } = useToast();
   const [showReplyForm, setShowReplyForm] = useState(false);
@@ -59,6 +61,7 @@ const ReplyItem: React.FC<ReplyItemProps> = ({ reply, discussionId, depth = 0 })
   const [editContent, setEditContent] = useState(reply.content);
   const [isMarked, setIsMarked] = useState(false);
   const [helpfulCount, setHelpfulCount] = useState(reply.helpfulCount || 0);
+  const [isBookmarked, setIsBookmarked] = useState(false);
   
   // Check if current user has marked this reply as helpful
   const checkIfMarkedAsHelpful = async () => {
@@ -68,6 +71,7 @@ const ReplyItem: React.FC<ReplyItemProps> = ({ reply, discussionId, depth = 0 })
       const response = await fetch(`/api/helpful/check?userId=${user.id}&replyId=${reply.id}`);
       const data = await response.json();
       setIsMarked(data.isMarked);
+      console.log("API /api/helpful/check returned:", data.isMarked, "for reply", reply.id, "user", user.id);
     } catch (error) {
       console.error("Failed to check helpful status:", error);
     }
@@ -76,7 +80,7 @@ const ReplyItem: React.FC<ReplyItemProps> = ({ reply, discussionId, depth = 0 })
   // Run on component mount
   useEffect(() => {
     checkIfMarkedAsHelpful();
-  }, []);
+  }, [user, reply.id]);
   
   const handleToggleHelpful = async () => {
     if (!user) return;
@@ -85,17 +89,20 @@ const ReplyItem: React.FC<ReplyItemProps> = ({ reply, discussionId, depth = 0 })
       if (isMarked) {
         await apiRequest("DELETE", "/api/helpful", {
           userId: user.id,
-          replyId: reply.id
+          replyId: reply.id,
+          type: "upvote"
         });
         setHelpfulCount(prev => Math.max(0, (prev || 0) - 1));
       } else {
         await apiRequest("POST", "/api/helpful", {
           userId: user.id,
-          replyId: reply.id
+          replyId: reply.id, 
+          type: "upvote"
         });
         setHelpfulCount(prev => (prev || 0) + 1);
       }
-      setIsMarked(!isMarked);
+      await checkIfMarkedAsHelpful();
+      console.log("After toggle, isMarked is:", isMarked);
     } catch (error) {
       toast({
         title: "Error",
@@ -151,6 +158,32 @@ const ReplyItem: React.FC<ReplyItemProps> = ({ reply, discussionId, depth = 0 })
       toast({
         title: "Error",
         description: error instanceof Error ? error.message : "Failed to delete reply",
+        variant: "destructive",
+      });
+    }
+  };
+  
+  const handleToggleBookmark = async () => {
+    if (!user) return;
+    try {
+      if (isBookmarked) {
+        await apiRequest("DELETE", "/api/bookmarks", {
+          userId: user.id,
+          discussionId: discussionId,
+        });
+        setIsBookmarked(false);
+      } else {
+        await apiRequest("POST", "/api/bookmarks", {
+          userId: user.id,
+          discussionId: discussionId,
+        });
+        setIsBookmarked(true);
+      }
+      // Optionally show a toast here
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to save discussion",
         variant: "destructive",
       });
     }
@@ -245,12 +278,13 @@ const ReplyItem: React.FC<ReplyItemProps> = ({ reply, discussionId, depth = 0 })
           <div className="flex items-center space-x-3 text-xs">
             <Button
               variant="ghost"
-              size="sm"
-              className={`text-gray-600 hover:text-[#FF4500] p-0 h-auto ${isMarked ? 'text-[#FF4500]' : ''}`}
+              className="group focus:bg-transparent active:bg-transparent focus:text-inherit active:text-inherit focus:outline-none"
               onClick={handleToggleHelpful}
             >
-              <ThumbsUp className="h-3 w-3 mr-1" />
-              <span>Helpful ({helpfulCount})</span>
+              <ThumbsUp className={`h-4 w-4 mr-1 ${isMarked ? 'text-[#FF4500]' : 'text-gray-400'} group-hover:text-[#FF4500]`} />
+              <span className={`${isMarked ? 'text-[#FF4500]' : 'text-gray-600'} group-hover:text-[#FF4500]`}>
+                Helpful ({helpfulCount})
+              </span>
             </Button>
             {depth < maxDepth && (
               <Button
@@ -262,6 +296,14 @@ const ReplyItem: React.FC<ReplyItemProps> = ({ reply, discussionId, depth = 0 })
                 Reply
               </Button>
             )}
+            <Button
+              variant="ghost"
+              className={`flex items-center ${isBookmarked ? "text-[#0079D3]" : "text-gray-600"} hover:text-[#0079D3]`}
+              onClick={handleToggleBookmark}
+            >
+              <Bookmark className="h-4 w-4 mr-1" />
+              <span>{isBookmarked ? "Saved" : "Save"}</span>
+            </Button>
           </div>
           
           {showReplyForm && (
@@ -269,7 +311,10 @@ const ReplyItem: React.FC<ReplyItemProps> = ({ reply, discussionId, depth = 0 })
               <ReplyForm 
                 discussionId={discussionId} 
                 parentId={reply.id} 
-                onSuccess={() => setShowReplyForm(false)} 
+                onSuccess={() => {
+                  setShowReplyForm(false);
+                  if (onReplySuccess) onReplySuccess();
+                }} 
               />
             </div>
           )}
@@ -284,7 +329,8 @@ const ReplyItem: React.FC<ReplyItemProps> = ({ reply, discussionId, depth = 0 })
               key={childReply.id}
               reply={childReply}
               discussionId={discussionId}
-              depth={depth + 1}
+              depth={(depth ?? 0) + 1} // Ensure depth is incremented for children
+              onReplySuccess={onReplySuccess}
             />
           ))}
         </div>
