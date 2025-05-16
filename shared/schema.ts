@@ -20,7 +20,7 @@ export const discussions = pgTable("discussions", {
   imagePath: text("image_path"),
   helpfulCount: integer("helpful_count").default(0),
   upvoteCount: integer("upvote_count").default(0),
-  //downvoteCount: integer("downvote_count").default(0),
+  downvoteCount: integer("downvote_count").default(0),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

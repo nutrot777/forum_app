@@ -602,6 +602,7 @@ const databaseStorage = new DatabaseStorage();
 
 export const storage = {
   ...databaseStorage,
+  getUser: databaseStorage.getUser.bind(databaseStorage),
   getUserByUsername: databaseStorage.getUserByUsername.bind(databaseStorage),
   createUser: databaseStorage.createUser.bind(databaseStorage),
   updateUserOnlineStatus: databaseStorage.updateUserOnlineStatus.bind(databaseStorage),
