@@ -130,7 +130,7 @@ const CreatePost: React.FC<CreatePostProps> = ({ onSuccess }) => {
 							setPreviewUrl(null);
 						}}
 					>
-						✕
+						 ✕
 					</Button>
 				</div>
 			)}
