@@ -24,6 +24,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { useQuery } from "@tanstack/react-query";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 interface DiscussionThreadProps {
   discussion: DiscussionWithDetails;
@@ -136,6 +137,36 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({ discussion }) => {
       setIsBookmarked(!isBookmarked);
     } catch (error) {
       console.error("Failed to toggle bookmark:", error);
+    }
+  };
+
+  const handleSaveOption = async (option: "current" | "continuous") => {
+    if (!user) return;
+    try {
+      if (option === "current") {
+        await apiRequest("POST", "/api/bookmarks", {
+          userId: user.id,
+          discussionId: discussion.id,
+          type: "current",
+        });
+      } else {
+        await apiRequest("POST", "/api/bookmarks", {
+          userId: user.id,
+          discussionId: discussion.id,
+          type: "continuous",
+        });
+      }
+      setIsBookmarked(true);
+      toast({
+        title: "Success",
+        description: `Discussion saved as ${option === "current" ? "current thread" : "continuous update"}`,
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to save discussion",
+        variant: "destructive",
+      });
     }
   };
 
@@ -385,16 +416,38 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({ discussion }) => {
                 <MessageSquare className="h-4 w-4 mr-1" />
                 <span>Show Replies{typeof discussionData.replies === 'object' ? ` (${discussionData.replies.length})` : ''}</span>
               </Button>
-              <Button
-                variant="ghost"
-                className="flex items-center text-gray-600 hover:text-[#0079D3]"
-                onClick={toggleBookmark}
-              >
-                <Bookmark
-                  className={`h-4 w-4 mr-1 ${isBookmarked ? 'fill-current text-[#0079D3]' : ''}`}
-                />
-                <span>Save</span>
-              </Button>
+              <Popover>
+                <PopoverTrigger>
+                  <Button
+                    variant="ghost"
+                    className="flex items-center text-gray-600 hover:text-[#0079D3]"
+                  >
+                    <Bookmark
+                      className={`h-4 w-4 mr-1 ${isBookmarked ? 'fill-current text-[#0079D3]' : ''}`}
+                    />
+                    <span>Save</span>
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="p-4 bg-white shadow-lg rounded-md border border-gray-200">
+                  <h4 className="text-sm font-medium text-gray-700 mb-2">Save Options</h4>
+                  <div className="flex flex-col space-y-2">
+                    <Button
+                      variant="outline"
+                      className="text-sm text-gray-600 hover:text-[#0079D3] hover:border-[#0079D3]"
+                      onClick={() => handleSaveOption("current")}
+                    >
+                      Save Current Thread
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="text-sm text-gray-600 hover:text-[#0079D3] hover:border-[#0079D3]"
+                      onClick={() => handleSaveOption("continuous")}
+                    >
+                      Save Continuous Update
+                    </Button>
+                  </div>
+                </PopoverContent>
+              </Popover>
               <Button
                 variant="ghost"
                 className="flex items-center text-gray-600 hover:text-[#0079D3]"
