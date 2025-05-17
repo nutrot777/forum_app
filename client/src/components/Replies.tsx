@@ -296,14 +296,14 @@ const ReplyItem: React.FC<ReplyItemProps> = ({ reply, discussionId, depth = 0, o
                 Reply
               </Button>
             )}
-            <Button
+            {/* <Button
               variant="ghost"
               className={`flex items-center ${isBookmarked ? "text-[#0079D3]" : "text-gray-600"} hover:text-[#0079D3]`}
               onClick={handleToggleBookmark}
             >
               <Bookmark className="h-4 w-4 mr-1" />
               <span>{isBookmarked ? "Saved" : "Save"}</span>
-            </Button>
+            </Button> */}
           </div>
           
           {showReplyForm && (
