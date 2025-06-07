@@ -310,9 +310,11 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({ discussion }) => {
               aria-label="Mark as helpful"
               onClick={handleToggleHelpful}
             >
-              <ArrowUp className={`h-6 w-6 text-gray-400 hover:text-[#FF4500] ${isMarked ? 'text-[#FF4500]' : ''}`} />
+              <ArrowUp className={`h-6 w-6 mr-1 ${isMarked ? 'text-[#FF4500]' : 'text-gray-400'} hover:text-[#FF4500]'`} />
             </Button>
-            <span className="text-sm font-medium">{discussionData.helpfulCount || 0}</span>
+            <span className={`text-sm font-medium ${isMarked ? 'text-[#FF4500]' : 'text-gray-600'} hover:text-[#FF4500]'`}>
+              {discussionData.helpfulCount || 0}
+            </span>
           </div>
           
           <div className="flex-1">

@@ -10,7 +10,8 @@ export function useDiscussions(filter: string = "recent") {
         throw new Error("Failed to fetch discussions");
       }
       return response.json();
-    }
+
+    }, refetchInterval:5000
   });
 }
 
