@@ -9,8 +9,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { format, formatDistanceToNow } from 'date-fns';
-import { Link } from 'wouter';
-import { BellIcon, CheckIcon, CheckSquareIcon, TrashIcon, XIcon } from 'lucide-react';
+import { BellIcon, CheckIcon, CheckSquareIcon, TrashIcon, XIcon, Maximize2 } from 'lucide-react';
 
 interface NotificationType {
   id: number;
@@ -27,19 +26,12 @@ interface NotificationType {
   };
 }
 
-export function NotificationItem({ notification, onRead, onDelete }: { 
+export function NotificationItem({ notification, onRead, onDelete, onOpenDiscussion }: { 
   notification: NotificationType; 
   onRead: (id: number) => void;
   onDelete: (id: number) => void;
+  onOpenDiscussion: (discussionId: number) => void;
 }) {
-  // Determine URL based on notification type
-  const getUrl = () => {
-    if (notification.discussionId) {
-      return `/discussions/${notification.discussionId}`;
-    }
-    return '/';
-  };
-
   // Format the date for display
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -75,9 +67,20 @@ export function NotificationItem({ notification, onRead, onDelete }: {
         <div className="text-xl">{getIcon()}</div>
         <div className="flex-1">
           <div className="flex items-start justify-between">
-            <Link href={getUrl()} className="text-primary hover:underline">
-              <div dangerouslySetInnerHTML={{ __html: notification.message }} />
-            </Link>
+            {notification.discussionId ? (
+              <span
+                role="button"
+                tabIndex={0}
+                className="text-primary hover:underline bg-transparent border-none p-0 m-0 cursor-pointer outline-none"
+                style={{ display: 'inline', background: 'none' }}
+                onClick={() => onOpenDiscussion(notification.discussionId!)}
+                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') onOpenDiscussion(notification.discussionId!); }}
+              >
+                <div dangerouslySetInnerHTML={{ __html: notification.message }} />
+              </span>
+            ) : (
+              <span dangerouslySetInnerHTML={{ __html: notification.message }} />
+            )}
             {!notification.isRead && (
               <Badge variant="outline" className="ml-2">New</Badge>
             )}
@@ -111,7 +114,12 @@ export function NotificationItem({ notification, onRead, onDelete }: {
   );
 }
 
-export function Notifications() {
+interface NotificationsProps {
+  onClosePopover?: () => void;
+  onOpenDiscussion: (discussionId: number) => void;
+}
+
+export function Notifications({ onClosePopover, onOpenDiscussion }: NotificationsProps) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -188,6 +196,12 @@ export function Notifications() {
     }
   });
 
+  // When a notification is clicked, close the popover and call onOpenDiscussion
+  const handleOpenDiscussion = (discussionId: number) => {
+    if (onClosePopover) onClosePopover();
+    onOpenDiscussion(discussionId);
+  };
+
   return (
     <Card className="w-full max-w-md mx-auto">
       <CardHeader className="flex flex-row items-center justify-between">
@@ -205,7 +219,7 @@ export function Notifications() {
       <CardContent>
         {isLoading ? (
           <div className="flex justify-center p-6">Loading notifications...</div>
-        ) : notifications?.length > 0 ? (
+        ) : notifications && notifications.length > 0 ? (
           <ScrollArea className="h-[300px]">
             {notifications.map((notification: NotificationType) => (
               <NotificationItem 
@@ -213,6 +227,7 @@ export function Notifications() {
                 notification={notification} 
                 onRead={(id) => markAsReadMutation.mutate(id)}
                 onDelete={(id) => deleteNotificationMutation.mutate(id)}
+                onOpenDiscussion={handleOpenDiscussion}
               />
             ))}
           </ScrollArea>
@@ -222,7 +237,7 @@ export function Notifications() {
           </div>
         )}
       </CardContent>
-      {notifications?.length > 0 && (
+      {notifications && notifications.length > 0 && (
         <CardFooter className="flex justify-between">
           <Button 
             variant="outline" 

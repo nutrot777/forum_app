@@ -31,6 +31,7 @@ declare global {
 }
 
 export class DatabaseStorage implements IStorage {
+
 	// User operations
 	async getUser(id: number): Promise<User | undefined> {
 		const [user] = await db.select().from(users).where(eq(users.id, id));
@@ -56,6 +57,14 @@ export class DatabaseStorage implements IStorage {
 		const result = await db.select().from(users).where(eq(users.isOnline, true));
 		return result.length;
 	}
+  
+  
+  async getTotalUserCount(): Promise<number> {
+    // Explicitly select the id column to ensure Drizzle returns an array
+    const result = await db.select({ id: users.id }).from(users);
+    console.log('Total users query result:', result);
+    return result.length;
+  }
 
 	// Discussion operations
 	async createDiscussion(insertDiscussion: InsertDiscussion): Promise<Discussion> {
@@ -600,3 +609,4 @@ export class DatabaseStorage implements IStorage {
 		}
 	}
 }
+
