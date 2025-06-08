@@ -3,7 +3,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Image } from "lucide-react";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, apiRequestWithUpload } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
@@ -67,7 +67,7 @@ const ReplyForm: React.FC<ReplyFormProps> = ({ discussionId, parentId, onSuccess
         formData.append("image", selectedImage);
       }
 
-      await apiRequest("POST", "/api/replies", formData);
+      await apiRequestWithUpload("POST", "/api/replies", formData);
       
       setContent("");
       setSelectedImage(null);
@@ -96,7 +96,7 @@ const ReplyForm: React.FC<ReplyFormProps> = ({ discussionId, parentId, onSuccess
   };
 
   return (
-    <div className="ml-8 mt-4">
+    <div className="mt-4">
       <form onSubmit={(e) => { e.preventDefault(); handleSubmit(); }}>
         <div className="flex">
           <Avatar className="w-8 h-8 hidden sm:block mr-2">

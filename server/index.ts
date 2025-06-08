@@ -2,6 +2,10 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { addEmailColumnsToUsers, createNotificationsTable } from "./migrations/addEmailToUsers";
+import { up, down } from "./migrations/add_type_to_helpful_marks";
+import { up as upUpvoteDownvoteCount, down as downUpvoteDownvoteCount } from "./migrations/add_upvote_downvote_count";
+import {up as upBookmarks, down as downBookmarks} from "./migrations/20240515_add_bookmarks";
+
 
 const app = express();
 app.use(express.json());
@@ -43,6 +47,9 @@ app.use((req, res, next) => {
     log("Running database migrations...");
     await addEmailColumnsToUsers();
     await createNotificationsTable();
+    await up();
+    await upUpvoteDownvoteCount();
+    await upBookmarks();
     log("Migrations completed successfully");
   } catch (err) {
     log("Error running migrations: " + (err as Error).message);

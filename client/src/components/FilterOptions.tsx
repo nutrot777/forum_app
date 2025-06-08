@@ -40,6 +40,16 @@ const FilterOptions: React.FC<FilterOptionsProps> = ({ currentFilter, setFilter 
         >
           My Discussions
         </Button>
+        <Button
+          className={`px-3 py-1.5 ${
+            currentFilter === "bookmarks"
+              ? "bg-[#0079D3] text-white"
+              : "text-[#1A1A1B] hover:bg-gray-100"
+          } rounded-md`}
+          onClick={() => setFilter("bookmarks")}
+        >
+          Bookmarks
+        </Button>
       </div>
     </div>
   );

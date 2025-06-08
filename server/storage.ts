@@ -20,6 +20,8 @@ import {
   type NotificationWithUser
 } from "@shared/schema";
 
+import { db } from "./db"; // Ensure db is imported
+
 export interface IStorage {
   // User operations
   getUser(id: number): Promise<User | undefined>;
@@ -105,10 +107,13 @@ export class MemStorage implements IStorage {
   async createUser(insertUser: InsertUser): Promise<User> {
     const id = this.userIdCounter++;
     const user: User = {
-      ...insertUser,
       id,
+      username: insertUser.username,
+      password: insertUser.password,
+      email: insertUser.email || null,
       isOnline: false,
-      lastSeen: new Date()
+      lastSeen: new Date(),
+      emailNotifications: insertUser.emailNotifications || null,
     };
     this.users.set(id, user);
     return user;
@@ -135,11 +140,15 @@ export class MemStorage implements IStorage {
   async createDiscussion(insertDiscussion: InsertDiscussion): Promise<Discussion> {
     const id = this.discussionIdCounter++;
     const discussion: Discussion = {
-      ...insertDiscussion,
       id,
+      title: insertDiscussion.title,
+      content: insertDiscussion.content,
+      userId: insertDiscussion.userId,
+      imagePath: insertDiscussion.imagePath || null,
       helpfulCount: 0,
+      upvoteCount: 0,
+      downvoteCount: 0,
       createdAt: new Date(),
-      imagePath: insertDiscussion.imagePath || null
     };
     this.discussions.set(id, discussion);
     return discussion;
@@ -173,10 +182,7 @@ export class MemStorage implements IStorage {
         return discussionsWithUsers;
       case 'recent':
       default:
-        return discussionsWithUsers.sort((a, b) => {
-          if (!a.createdAt || !b.createdAt) return 0;
-          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-        });
+        return discussionsWithUsers.sort((a, b) => (b.createdAt?.getTime() || 0) - (a.createdAt?.getTime() || 0));
     }
   }
 
@@ -234,12 +240,16 @@ export class MemStorage implements IStorage {
   async createReply(insertReply: InsertReply): Promise<Reply> {
     const id = this.replyIdCounter++;
     const reply: Reply = {
-      ...insertReply,
       id,
-      helpfulCount: 0,
-      createdAt: new Date(),
+      content: insertReply.content,
+      userId: insertReply.userId,
+      discussionId: insertReply.discussionId,
+      parentId: insertReply.parentId || null,
       imagePath: insertReply.imagePath || null,
-      parentId: insertReply.parentId || null
+      helpfulCount: 0,
+      upvoteCount: 0,
+      downvoteCount: 0,
+      createdAt: new Date(),
     };
     this.replies.set(id, reply);
     return reply;
@@ -276,10 +286,7 @@ export class MemStorage implements IStorage {
       }
     }
     
-    return repliesWithUsers.sort((a, b) => {
-      if (!a.createdAt || !b.createdAt) return 0;
-      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-    });
+    return repliesWithUsers.sort((a, b) => (a.createdAt?.getTime() || 0) - (b.createdAt?.getTime() || 0));
   }
   
   private async getChildReplies(parentId: number, allReplies: Reply[]): Promise<ReplyWithUser[]> {
@@ -303,10 +310,7 @@ export class MemStorage implements IStorage {
       }
     }
     
-    return childRepliesWithUsers.sort((a, b) => {
-      if (!a.createdAt || !b.createdAt) return 0;
-      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-    });
+    return childRepliesWithUsers.sort((a, b) => (a.createdAt?.getTime() || 0) - (b.createdAt?.getTime() || 0));
   }
 
   async updateReply(id: number, partialReply: Partial<InsertReply>): Promise<Reply | undefined> {
@@ -462,7 +466,7 @@ export class MemStorage implements IStorage {
   async getNotifications(userId: number): Promise<NotificationWithUser[]> {
     const userNotifications = Array.from(this.notifications.values())
       .filter(notification => notification.userId === userId)
-      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      .sort((a, b) => (b.createdAt?.getTime() || 0) - (a.createdAt?.getTime() || 0));
     
     const result: NotificationWithUser[] = [];
     
@@ -557,7 +561,7 @@ export class MemStorage implements IStorage {
   async getPendingEmailNotifications(): Promise<NotificationWithUser[]> {
     const pendingNotifications = Array.from(this.notifications.values())
       .filter(notification => !notification.emailSent)
-      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+      .sort((a, b) => (a.createdAt?.getTime() || 0) - (b.createdAt?.getTime() || 0));
     
     const result: NotificationWithUser[] = [];
     
@@ -591,8 +595,40 @@ export class MemStorage implements IStorage {
   }
 }
 
-// Import the DatabaseStorage class
+// Ensure all methods from DatabaseStorage are included in the storage object
 import { DatabaseStorage } from "./databaseStorage";
 
-// Use DatabaseStorage instead of MemStorage
-export const storage = new DatabaseStorage();
+const databaseStorage = new DatabaseStorage();
+
+export const storage = {
+  ...databaseStorage,
+  getUser: databaseStorage.getUser.bind(databaseStorage),
+  getUserByUsername: databaseStorage.getUserByUsername.bind(databaseStorage),
+  createUser: databaseStorage.createUser.bind(databaseStorage),
+  updateUserOnlineStatus: databaseStorage.updateUserOnlineStatus.bind(databaseStorage),
+  getOnlineUsers: databaseStorage.getOnlineUsers.bind(databaseStorage),
+  getDiscussions: databaseStorage.getDiscussions.bind(databaseStorage),
+  getDiscussionById: databaseStorage.getDiscussionById.bind(databaseStorage),
+  createDiscussion: databaseStorage.createDiscussion.bind(databaseStorage),
+  updateDiscussion: databaseStorage.updateDiscussion.bind(databaseStorage),
+  deleteDiscussion: databaseStorage.deleteDiscussion.bind(databaseStorage),
+  createReply: databaseStorage.createReply.bind(databaseStorage),
+  getReplyById: databaseStorage.getReplyById.bind(databaseStorage),
+  getRepliesByDiscussionId: databaseStorage.getRepliesByDiscussionId.bind(databaseStorage),
+  updateReply: databaseStorage.updateReply.bind(databaseStorage),
+  deleteReply: databaseStorage.deleteReply.bind(databaseStorage),
+  markAsHelpful: databaseStorage.markAsHelpful.bind(databaseStorage),
+  removeHelpfulMark: databaseStorage.removeHelpfulMark.bind(databaseStorage),
+  isMarkedAsHelpful: databaseStorage.isMarkedAsHelpful.bind(databaseStorage),
+  createNotification: databaseStorage.createNotification.bind(databaseStorage),
+  getNotifications: databaseStorage.getNotifications.bind(databaseStorage),
+  getNotification: databaseStorage.getNotification.bind(databaseStorage),
+  markNotificationAsRead: databaseStorage.markNotificationAsRead.bind(databaseStorage),
+  markAllNotificationsAsRead: databaseStorage.markAllNotificationsAsRead.bind(databaseStorage),
+  deleteNotification: databaseStorage.deleteNotification.bind(databaseStorage),
+  getUnreadNotificationsCount: databaseStorage.getUnreadNotificationsCount.bind(databaseStorage),
+  markNotificationEmailSent: databaseStorage.markNotificationEmailSent.bind(databaseStorage),
+  getPendingEmailNotifications: databaseStorage.getPendingEmailNotifications.bind(databaseStorage),
+  getBookmarkedDiscussions: databaseStorage.getBookmarkedDiscussions.bind(databaseStorage),
+  addBookmark: databaseStorage.addBookmark.bind(databaseStorage),
+};
