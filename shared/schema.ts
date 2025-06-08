@@ -1,4 +1,11 @@
-import { pgTable, text, serial, integer, boolean, timestamp } from "drizzle-orm/pg-core";
+import {
+  pgTable,
+  text,
+  serial,
+  integer,
+  boolean,
+  timestamp,
+} from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -16,7 +23,9 @@ export const discussions = pgTable("discussions", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
   content: text("content").notNull(),
-  userId: integer("user_id").notNull().references(() => users.id),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id),
   imagePath: text("image_path"),
   helpfulCount: integer("helpful_count").default(0),
   upvoteCount: integer("upvote_count").default(0),
@@ -27,9 +36,13 @@ export const discussions = pgTable("discussions", {
 export const replies = pgTable("replies", {
   id: serial("id").primaryKey(),
   content: text("content").notNull(),
-  userId: integer("user_id").notNull().references(() => users.id),
-  discussionId: integer("discussion_id").notNull().references(() => discussions.id),
-  parentId: integer("parent_id"),  // Self-reference handled later
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id),
+  discussionId: integer("discussion_id")
+    .notNull()
+    .references(() => discussions.id),
+  parentId: integer("parent_id"), // Self-reference handled later
   imagePath: text("image_path"),
   helpfulCount: integer("helpful_count").default(0),
   upvoteCount: integer("upvote_count").default(0),
@@ -42,7 +55,9 @@ export const replies = pgTable("replies", {
 
 export const helpfulMarks = pgTable("helpful_marks", {
   id: serial("id").primaryKey(),
-  userId: integer("user_id").notNull().references(() => users.id),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id),
   discussionId: integer("discussion_id").references(() => discussions.id),
   replyId: integer("reply_id").references(() => replies.id),
   type: text("type").notNull(), // 'upvote' or 'downvote'
@@ -51,8 +66,12 @@ export const helpfulMarks = pgTable("helpful_marks", {
 
 export const notifications = pgTable("notifications", {
   id: serial("id").primaryKey(),
-  userId: integer("user_id").notNull().references(() => users.id),
-  triggeredByUserId: integer("triggered_by_user_id").notNull().references(() => users.id),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id),
+  triggeredByUserId: integer("triggered_by_user_id")
+    .notNull()
+    .references(() => users.id),
   discussionId: integer("discussion_id").references(() => discussions.id),
   replyId: integer("reply_id").references(() => replies.id),
   type: text("type").notNull(), // "reply" or "helpful"
@@ -64,21 +83,28 @@ export const notifications = pgTable("notifications", {
 
 export const bookmarks = pgTable("bookmarks", {
   id: serial("id").primaryKey(),
-  userId: integer("user_id").notNull().references(() => users.id),
-  discussionId: integer("discussion_id").notNull().references(() => discussions.id),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id),
+  discussionId: integer("discussion_id")
+    .notNull()
+    .references(() => discussions.id),
+  saveDiscussionThread: boolean("save_discussion_thread").default(false),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
 // Insert schemas
-export const insertUserSchema = createInsertSchema(users).pick({
-  username: true,
-  password: true,
-  email: true,
-  emailNotifications: true,
-}).extend({
-  email: z.string().email().nullable().optional(),
-  emailNotifications: z.boolean().optional(),
-});
+export const insertUserSchema = createInsertSchema(users)
+  .pick({
+    username: true,
+    password: true,
+    email: true,
+    emailNotifications: true,
+  })
+  .extend({
+    email: z.string().email().nullable().optional(),
+    emailNotifications: z.boolean().optional(),
+  });
 
 export const insertDiscussionSchema = createInsertSchema(discussions)
   .pick({
@@ -131,11 +157,10 @@ export const insertNotificationSchema = createInsertSchema(notifications)
     replyId: z.number().nullable().optional(),
   });
 
-export const insertBookmarkSchema = createInsertSchema(bookmarks)
-  .pick({
-    userId: true,
-    discussionId: true,
-  });
+export const insertBookmarkSchema = createInsertSchema(bookmarks).pick({
+  userId: true,
+  discussionId: true,
+});
 
 // Types
 export type User = typeof users.$inferSelect;
@@ -158,11 +183,11 @@ export type InsertBookmark = z.infer<typeof insertBookmarkSchema>;
 
 // Extended Types for API responses
 export type DiscussionWithUser = Discussion & {
-  user: Omit<User, 'password'>;
+  user: Omit<User, "password">;
 };
 
 export type ReplyWithUser = Reply & {
-  user: Omit<User, 'password'>;
+  user: Omit<User, "password">;
   childReplies?: ReplyWithUser[];
 };
 
@@ -171,7 +196,7 @@ export type DiscussionWithDetails = DiscussionWithUser & {
 };
 
 export type NotificationWithUser = Notification & {
-  triggeredByUser: Omit<User, 'password'>;
+  triggeredByUser: Omit<User, "password">;
   discussion?: Discussion;
   reply?: Reply;
 };

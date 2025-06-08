@@ -72,7 +72,7 @@ const Home = () => {
       ) : limitedDiscussions && limitedDiscussions.length > 0 ? (
         <div className="space-y-4">
           {limitedDiscussions.map((discussion) => (
-            <DiscussionThread key={discussion.id} discussion={discussion} />
+            <DiscussionThread key={discussion.id} discussion={discussion} filter={filter} />
           ))}
 
           {hasMore && (
