@@ -511,6 +511,7 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({ discussion, filter 
 			)}
 		</div>
 	);
+
 };
 
 export default DiscussionThread;

@@ -76,7 +76,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   );
 
   // Set default online count to 1 for testing
-  await storage.updateUserOnlineStatus(1, true);
+  //await storage.updateUserOnlineStatus(1, true);
+
+  // --- REMOVE TEST ROUTES AND DEBUG LOGGING ---
+  // (No /api/test route, no debug logs)
 
   // API Routes
   // Auth routes
@@ -127,6 +130,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Don't return password in response
       const { password: _, ...userWithoutPassword } = user;
+      req.session.userId = user.id;
+      await new Promise <void>((resolve, reject) => {
+        req.session.save((err) => (err ? reject(err) : resolve()));
+      });
       res.status(200).json(userWithoutPassword);
     } catch (error) {
       res.status(400).json({
@@ -144,6 +151,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       await storage.updateUserOnlineStatus(userId, false);
+      req.session.userId = null;
+      await new Promise <void>((resolve, reject) => {
+        req.session.save((err) => (err ? reject(err) : resolve()));
+      });
       res.status(200).json({ message: "Logged out successfully" });
     } catch (error) {
       res.status(400).json({
@@ -161,6 +172,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({
         message: error instanceof Error ? error.message : "Server error",
       });
+    }
+  });
+
+  // Get total user count
+  app.get("/api/users/count", async (_req: Request, res: Response) => {
+    try {
+      const count = await storage.getTotalUserCount();
+      res.status(200).json({ count });
+    } catch (error) {
+      res.status(500).json({ message: error instanceof Error ? error.message : "Server error" });
     }
   });
 
