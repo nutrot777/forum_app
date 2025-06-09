@@ -300,23 +300,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
           imagePaths = imagePaths.concat(newPaths);
         }
         // --- FIX: Always merge captions to match imagePaths length ---
-        // captions = captions.concat(newCaptions);
-        // If all images are removed, captions should be empty too
-        // if (imagePaths.length === 0) captions = [];
-        // --- New logic below ---
-        // Merge captions so that captions array always matches imagePaths
-        // (existingImages + newImages)
         let mergedCaptions: string[] = [];
-        // Add captions for existing images
         for (let i = 0; i < imagePaths.length - (files?.length || 0); i++) {
           mergedCaptions.push(captions[i] || "");
         }
-        // Add captions for new images
         for (let i = 0; i < (files?.length || 0); i++) {
           mergedCaptions.push(newCaptions[i] || "");
         }
-        // If all images are removed, captions should be empty
         if (imagePaths.length === 0) mergedCaptions = [];
+
+        // --- Delete removed images from Cloudinary ---
+        if (discussion.imagePaths && Array.isArray(discussion.imagePaths)) {
+          const removed = discussion.imagePaths.filter((url: string) => !imagePaths.includes(url));
+          for (const url of removed) {
+            try {
+              const match = url.match(/\/forum_uploads\/([^./]+)(\.[a-zA-Z0-9]+)?$/);
+              let publicId = null;
+              if (match) {
+                publicId = `forum_uploads/${match[1]}`;
+              } else {
+                const fallback = url.split("/upload/")[1];
+                if (fallback) publicId = fallback.replace(/\.[a-zA-Z0-9]+$/, "").replace(/\?.*$/, "");
+              }
+              if (publicId) {
+                await cloudinary.uploader.destroy(publicId);
+              }
+            } catch (err) {
+              console.error("Failed to delete image from Cloudinary (edit):", url, err);
+            }
+          }
+        }
+
         const data = {
           ...req.body,
           userId: parseInt(req.body.userId),
@@ -353,6 +367,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res
           .status(403)
           .json({ message: "You can only delete your own discussions" });
+      }
+
+      // --- Delete images from Cloudinary ---
+      if (discussion.imagePaths && Array.isArray(discussion.imagePaths)) {
+        for (const url of discussion.imagePaths) {
+          try {
+            // Extract public ID from Cloudinary URL
+            // Example: https://res.cloudinary.com/<cloud_name>/image/upload/v1234567890/forum_uploads/filename.jpg
+            const match = url.match(/\/forum_uploads\/([^./]+)(\.[a-zA-Z0-9]+)?$/);
+            let publicId = null;
+            if (match) {
+              publicId = `forum_uploads/${match[1]}`;
+            } else {
+              // fallback: try to extract after '/upload/'
+              const fallback = url.split("/upload/")[1];
+              if (fallback) publicId = fallback.replace(/\.[a-zA-Z0-9]+$/, "").replace(/\?.*$/, "");
+            }
+            if (publicId) {
+              await cloudinary.uploader.destroy(publicId);
+            }
+          } catch (err) {
+            console.error("Failed to delete image from Cloudinary:", url, err);
+          }
+        }
       }
 
       await storage.deleteDiscussion(id);
@@ -573,6 +611,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
           mergedCaptions.push(newCaptions[i] || "");
         }
         if (imagePaths.length === 0) mergedCaptions = [];
+
+        // --- Delete removed images from Cloudinary ---
+        if (reply.imagePaths && Array.isArray(reply.imagePaths)) {
+          const removed = reply.imagePaths.filter((url: string) => !imagePaths.includes(url));
+          for (const url of removed) {
+            try {
+              const match = url.match(/\/forum_uploads\/([^./]+)(\.[a-zA-Z0-9]+)?$/);
+              let publicId = null;
+              if (match) {
+                publicId = `forum_uploads/${match[1]}`;
+              } else {
+                const fallback = url.split("/upload/")[1];
+                if (fallback) publicId = fallback.replace(/\.[a-zA-Z0-9]+$/, "").replace(/\?.*$/, "");
+              }
+              if (publicId) {
+                await cloudinary.uploader.destroy(publicId);
+              }
+            } catch (err) {
+              console.error("Failed to delete image from Cloudinary (edit):", url, err);
+            }
+          }
+        }
+
         const data = {
           ...req.body,
           userId,
@@ -610,6 +671,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res
           .status(403)
           .json({ message: "You can only delete your own replies" });
+      }
+
+      // --- Delete images from Cloudinary ---
+      if (reply.imagePaths && Array.isArray(reply.imagePaths)) {
+        for (const url of reply.imagePaths) {
+          try {
+            // Extract public ID from Cloudinary URL
+            const match = url.match(/\/forum_uploads\/([^./]+)(\.[a-zA-Z0-9]+)?$/);
+            let publicId = null;
+            if (match) {
+              publicId = `forum_uploads/${match[1]}`;
+            } else {
+              // fallback: try to extract after '/upload/'
+              const fallback = url.split("/upload/")[1];
+              if (fallback) publicId = fallback.replace(/\.[a-zA-Z0-9]+$/, "").replace(/\?.*$/, "");
+            }
+            if (publicId) {
+              await cloudinary.uploader.destroy(publicId);
+            }
+          } catch (err) {
+            console.error("Failed to delete image from Cloudinary:", url, err);
+          }
+        }
       }
 
       await storage.deleteReply(id);
