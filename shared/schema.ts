@@ -26,7 +26,8 @@ export const discussions = pgTable("discussions", {
   userId: integer("user_id")
     .notNull()
     .references(() => users.id),
-  imagePath: text("image_path"),
+  imagePaths: text("image_paths").array(), // store as array of URLs
+  captions: text("captions").array(), // store as array of captions (optional)
   helpfulCount: integer("helpful_count").default(0),
   upvoteCount: integer("upvote_count").default(0),
   downvoteCount: integer("downvote_count").default(0),
@@ -43,7 +44,8 @@ export const replies = pgTable("replies", {
     .notNull()
     .references(() => discussions.id),
   parentId: integer("parent_id"), // Self-reference handled later
-  imagePath: text("image_path"),
+  imagePaths: text("image_paths").array(), // store as array of URLs
+  captions: text("captions").array(), // store as array of captions (optional)
   helpfulCount: integer("helpful_count").default(0),
   upvoteCount: integer("upvote_count").default(0),
   downvoteCount: integer("downvote_count").default(0),
@@ -111,10 +113,12 @@ export const insertDiscussionSchema = createInsertSchema(discussions)
     title: true,
     content: true,
     userId: true,
-    imagePath: true,
+    imagePaths: true,
+    captions: true,
   })
   .extend({
-    imagePath: z.string().nullable().optional(),
+    imagePaths: z.array(z.string()).nullable().optional(),
+    captions: z.array(z.string()).nullable().optional(),
   });
 
 export const insertReplySchema = createInsertSchema(replies)
@@ -123,10 +127,12 @@ export const insertReplySchema = createInsertSchema(replies)
     userId: true,
     discussionId: true,
     parentId: true,
-    imagePath: true,
+    imagePaths: true,
+    captions: true,
   })
   .extend({
-    imagePath: z.string().nullable().optional(),
+    imagePaths: z.array(z.string()).nullable().optional(),
+    captions: z.array(z.string()).nullable().optional(),
     parentId: z.number().nullable().optional(),
   });
 
@@ -166,10 +172,10 @@ export const insertBookmarkSchema = createInsertSchema(bookmarks).pick({
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 
-export type Discussion = typeof discussions.$inferSelect;
+export type Discussion = typeof discussions.$inferSelect & { captions?: string[] };
 export type InsertDiscussion = z.infer<typeof insertDiscussionSchema>;
 
-export type Reply = typeof replies.$inferSelect;
+export type Reply = typeof replies.$inferSelect & { captions?: string[] };
 export type InsertReply = z.infer<typeof insertReplySchema>;
 
 export type HelpfulMark = typeof helpfulMarks.$inferSelect;

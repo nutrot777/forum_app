@@ -25,6 +25,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { useQuery } from "@tanstack/react-query";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import CreatePost from "./CreatePost";
 
 interface DiscussionThreadProps {
 	discussion: DiscussionWithDetails;
@@ -40,6 +41,7 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({ discussion, filter 
 	const [editTitle, setEditTitle] = useState(discussion.title);
 	const [editContent, setEditContent] = useState(discussion.content);
 	const [isBookmarked, setIsBookmarked] = useState(false);
+	const [discussionDataState, setDiscussionDataState] = useState(discussion);
 	const discussionRef = useRef<HTMLDivElement>(null);
 
 	// Add logging to debug the `discussion` object
@@ -58,6 +60,10 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({ discussion, filter 
 		initialData: discussion,
 		refetchInterval: 2000, // Poll every 2 seconds for new upvotes/downvotes
 	});
+	// Keep local state in sync with server
+	useEffect(() => {
+		if (discussionData) setDiscussionDataState(discussionData);
+	}, [discussionData]);
 
 	// Check if current user has marked this discussion as helpful
 	const checkIfMarkedAsHelpful = async () => {
@@ -316,33 +322,29 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({ discussion, filter 
 								}`}
 							/>
 						</Button>
-						<span className="text-sm font-medium">{discussionData.helpfulCount || 0}</span>
+						<span className="text-sm font-medium">{discussionDataState.helpfulCount || 0}</span>
 					</div>
 
 					<div className="flex-1">
 						{isEditing ? (
-							<div>
-								<Input
-									value={editTitle}
-									onChange={(e) => setEditTitle(e.target.value)}
-									className="font-ibm font-semibold text-xl mb-3 w-full"
-								/>
-								<Textarea
-									value={editContent}
-									onChange={(e) => setEditContent(e.target.value)}
-									className="w-full min-h-[100px] mb-3"
-								/>
-								<div className="flex space-x-2">
-									<Button onClick={handleSaveEdit}>Save</Button>
-									<Button variant="outline" onClick={() => setIsEditing(false)}>
-										Cancel
-									</Button>
-								</div>
-							</div>
+							<CreatePost
+								onSuccess={(updated) => {
+									if (updated) setDiscussionDataState(updated);
+									setIsEditing(false);
+									refetch();
+								}}
+								editingDiscussion={{
+									id: discussionDataState.id,
+									title: discussionDataState.title,
+									content: discussionDataState.content,
+									imagePaths: discussionDataState.imagePaths || [],
+									captions: discussionDataState.captions || [],
+								}}
+							/>
 						) : (
 							<>
 								<div className="flex justify-between items-start">
-									<h3 className="font-ibm font-semibold text-xl mb-1">{discussion.title}</h3>
+									<h3 className="font-ibm font-semibold text-xl mb-1">{discussionDataState.title}</h3>
 									{isOwner && (
 										<div className="flex space-x-1">
 											<Button
@@ -387,15 +389,15 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({ discussion, filter 
 									<Avatar className="w-5 h-5">
 										<AvatarImage
 											src={`https://ui-avatars.com/api/?name=${
-												discussion.user?.username || "Unknown"
+												discussionDataState.user?.username || "Unknown"
 											}&background=random`}
-											alt={discussion.user?.username || "Unknown"}
+											alt={discussionDataState.user?.username || "Unknown"}
 										/>
 										<AvatarFallback>
-											{discussion.user?.username?.charAt(0).toUpperCase() || "U"}
+											{discussionDataState.user?.username?.charAt(0).toUpperCase() || "U"}
 										</AvatarFallback>
 									</Avatar>
-									<span className="font-medium">{discussion.user?.username || "Unknown"}</span>
+									<span className="font-medium">{discussionDataState.user?.username || "Unknown"}</span>
 									{isOwner && (
 										<span className="bg-[#0079D3]/10 text-[#0079D3] text-xs px-1.5 py-0.5 rounded">
 											You
@@ -406,14 +408,23 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({ discussion, filter 
 								</div>
 
 								<div className="prose max-w-none mb-4">
-									<p>{discussion.content}</p>
-
-									{discussion.imagePath && (
-										<img
-											src={discussion.imagePath}
-											alt="Discussion attachment"
-											className="my-3 rounded-md border border-gray-200 max-h-96 object-contain"
-										/>
+									<p>{discussionDataState.content}</p>
+									{discussionDataState.imagePaths && discussionDataState.imagePaths.length > 0 && (
+										<div className="flex flex-wrap gap-2 mt-2">
+											{discussionDataState.imagePaths.map((url, idx) => (
+												<div key={idx} className="flex flex-col items-center">
+													<img
+														src={url}
+														alt={`Discussion attachment ${idx + 1}`}
+														className="rounded-md border border-gray-200 max-h-64 object-contain max-w-xs"
+														style={{ flex: '1 1 200px', minWidth: 0 }}
+													/>
+													{discussionDataState.captions && discussionDataState.captions[idx] && (
+														<span className="text-xs text-gray-500 mt-1">{discussionDataState.captions[idx]}</span>
+													)}
+												</div>
+											))}
+										</div>
 									)}
 								</div>
 							</>

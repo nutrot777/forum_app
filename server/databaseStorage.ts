@@ -30,6 +30,24 @@ declare global {
 	var userId: number | undefined;
 }
 
+// Utility to normalize reply fields
+function normalizeReply<T extends { captions?: string[] | null; imagePaths?: string[] | null }>(reply: T): T & { captions: string[]; imagePaths: string[] } {
+  return {
+    ...reply,
+    captions: Array.isArray(reply.captions) ? reply.captions : [],
+    imagePaths: Array.isArray(reply.imagePaths) ? reply.imagePaths : [],
+  };
+}
+
+// Utility to normalize discussion fields
+function normalizeDiscussion<T extends { captions?: string[] | null; imagePaths?: string[] | null }>(discussion: T): T & { captions: string[]; imagePaths: string[] } {
+  return {
+    ...discussion,
+    captions: Array.isArray(discussion.captions) ? discussion.captions : [],
+    imagePaths: Array.isArray(discussion.imagePaths) ? discussion.imagePaths : [],
+  };
+}
+
 export class DatabaseStorage implements IStorage {
 	// User operations
 	async getUser(id: number): Promise<User | undefined> {
@@ -63,15 +81,18 @@ export class DatabaseStorage implements IStorage {
 			.insert(discussions)
 			.values({
 				...insertDiscussion,
-				imagePath: insertDiscussion.imagePath || null,
+				// imagePaths is now the correct field
+				imagePaths: insertDiscussion.imagePaths || [],
+				captions: insertDiscussion.captions || [],
 			})
 			.returning();
-		return discussion;
+		return normalizeDiscussion(discussion);
 	}
 
 	// Add logging to debug the `user` field in discussions
 	async getDiscussions(filter: string = "recent"): Promise<DiscussionWithUser[]> {
-		const allDiscussions = await db.select().from(discussions);
+		const allDiscussionsRaw = await db.select().from(discussions);
+		const allDiscussions = allDiscussionsRaw.map(normalizeDiscussion);
 		const userIds = Array.from(new Set(allDiscussions.map((d) => d.userId)));
 
 		let allUsers: User[] = [];
@@ -116,34 +137,27 @@ export class DatabaseStorage implements IStorage {
 	}
 
 	async getDiscussionById(id: number): Promise<DiscussionWithDetails | undefined> {
-		const [discussion] = await db.select().from(discussions).where(eq(discussions.id, id));
-
-		if (!discussion) return undefined;
-
+		const [discussionRaw] = await db.select().from(discussions).where(eq(discussions.id, id));
+		if (!discussionRaw) return undefined;
+		const discussion = normalizeDiscussion(discussionRaw);
 		const [user] = await db.select().from(users).where(eq(users.id, discussion.userId));
-
 		if (!user) return undefined;
-
 		const { password, ...userWithoutPassword } = user;
-
-		const allReplies = await db.select().from(replies).where(eq(replies.discussionId, id));
-
+		// Normalize allReplies
+		const allRepliesRaw = await db.select().from(replies).where(eq(replies.discussionId, id));
+		const allReplies = allRepliesRaw.map(normalizeReply);
 		const userIds = Array.from(new Set(allReplies.map((r) => r.userId)));
-
 		let replyUsers: User[] = [];
 		if (userIds.length > 0) {
 			replyUsers = await db.select().from(users).where(inArray(users.id, userIds));
 		}
-
 		const repliesWithUsers: ReplyWithUser[] = [];
 		const topLevelReplies = allReplies.filter((r) => r.parentId === null);
-
 		for (const reply of topLevelReplies) {
 			const replyUser = replyUsers.find((u) => u.id === reply.userId);
 			if (replyUser) {
 				const { password, ...userWithoutPassword } = replyUser;
 				const childReplies = this.buildReplyTree(reply.id, allReplies, replyUsers);
-
 				repliesWithUsers.push({
 					...reply,
 					user: userWithoutPassword,
@@ -151,7 +165,6 @@ export class DatabaseStorage implements IStorage {
 				});
 			}
 		}
-
 		return {
 			...discussion,
 			user: userWithoutPassword,
@@ -160,15 +173,14 @@ export class DatabaseStorage implements IStorage {
 	}
 
 	private buildReplyTree(parentId: number, allReplies: Reply[], replyUsers: User[]): ReplyWithUser[] {
+		// allReplies must be normalized before calling this
 		const childReplies: ReplyWithUser[] = [];
 		const directChildren = allReplies.filter((r) => r.parentId === parentId);
-
 		for (const child of directChildren) {
 			const childUser = replyUsers.find((u) => u.id === child.userId);
 			if (childUser) {
 				const { password, ...userWithoutPassword } = childUser;
 				const nestedChildren = this.buildReplyTree(child.id, allReplies, replyUsers);
-
 				childReplies.push({
 					...child,
 					user: userWithoutPassword,
@@ -176,7 +188,6 @@ export class DatabaseStorage implements IStorage {
 				});
 			}
 		}
-
 		return childReplies;
 	}
 
@@ -185,11 +196,12 @@ export class DatabaseStorage implements IStorage {
 			.update(discussions)
 			.set({
 				...partialDiscussion,
-				imagePath: partialDiscussion.imagePath || null,
+				imagePaths: partialDiscussion.imagePaths || [],
+				captions: partialDiscussion.captions || [],
 			})
 			.where(eq(discussions.id, id))
 			.returning();
-		return updatedDiscussion || undefined;
+		return updatedDiscussion ? normalizeDiscussion(updatedDiscussion) : undefined;
 	}
 
 	async deleteDiscussion(id: number): Promise<boolean> {
@@ -211,37 +223,33 @@ export class DatabaseStorage implements IStorage {
 			.insert(replies)
 			.values({
 				...insertReply,
-				parentId: insertReply.parentId || null,
-				imagePath: insertReply.imagePath || null,
+				imagePaths: insertReply.imagePaths || [],
+				captions: insertReply.captions || [],
 			})
 			.returning();
-		return reply;
+		return normalizeReply(reply);
 	}
 
 	async getReplyById(id: number): Promise<Reply | undefined> {
 		const [reply] = await db.select().from(replies).where(eq(replies.id, id));
-		return reply || undefined;
+		return reply ? normalizeReply(reply) : undefined;
 	}
 
 	async getRepliesByDiscussionId(discussionId: number): Promise<ReplyWithUser[]> {
-		const allReplies = await db.select().from(replies).where(eq(replies.discussionId, discussionId));
-
+		const allRepliesRaw = await db.select().from(replies).where(eq(replies.discussionId, discussionId));
+		const allReplies = allRepliesRaw.map(normalizeReply);
 		const userIds = Array.from(new Set(allReplies.map((r) => r.userId)));
-
 		let replyUsers: User[] = [];
 		if (userIds.length > 0) {
 			replyUsers = await db.select().from(users).where(inArray(users.id, userIds));
 		}
-
 		const topLevelReplies = allReplies.filter((r) => r.parentId === null);
 		const result: ReplyWithUser[] = [];
-
 		for (const reply of topLevelReplies) {
 			const user = replyUsers.find((u) => u.id === reply.userId);
 			if (user) {
 				const { password, ...userWithoutPassword } = user;
 				const childReplies = this.buildReplyTree(reply.id, allReplies, replyUsers);
-
 				result.push({
 					...reply,
 					user: userWithoutPassword,
@@ -249,7 +257,6 @@ export class DatabaseStorage implements IStorage {
 				});
 			}
 		}
-
 		return result;
 	}
 
@@ -258,11 +265,12 @@ export class DatabaseStorage implements IStorage {
 			.update(replies)
 			.set({
 				...partialReply,
-				imagePath: partialReply.imagePath || null,
+				imagePaths: partialReply.imagePaths || [],
+				captions: partialReply.captions || [],
 			})
 			.where(eq(replies.id, id))
 			.returning();
-		return updatedReply || undefined;
+		return updatedReply ? normalizeReply(updatedReply) : undefined;
 	}
 
 	async deleteReply(id: number): Promise<boolean> {
@@ -394,7 +402,7 @@ export class DatabaseStorage implements IStorage {
 				discussionId: notification.discussionId || null,
 				replyId: notification.replyId || null,
 				isRead: false,
-				isEmailSent: false,
+				emailSent: false,
 			})
 			.returning();
 		return newNotification;
@@ -422,13 +430,14 @@ export class DatabaseStorage implements IStorage {
 		// Get discussions
 		let relatedDiscussions: Discussion[] = [];
 		if (discussionIds.length > 0) {
-			relatedDiscussions = await db.select().from(discussions).where(inArray(discussions.id, discussionIds));
+			relatedDiscussions = (await db.select().from(discussions).where(inArray(discussions.id, discussionIds))).map(normalizeDiscussion);
 		}
 
-		// Get replies
+		// Get replies and normalize them
 		let relatedReplies: Reply[] = [];
 		if (replyIds.length > 0) {
-			relatedReplies = await db.select().from(replies).where(inArray(replies.id, replyIds));
+			const rawReplies = await db.select().from(replies).where(inArray(replies.id, replyIds));
+			relatedReplies = rawReplies.map(normalizeReply);
 		}
 
 		// Build the result
@@ -500,7 +509,7 @@ export class DatabaseStorage implements IStorage {
 	async markNotificationEmailSent(id: number): Promise<boolean> {
 		const result = await db
 			.update(notifications)
-			.set({ isEmailSent: true })
+			.set({ emailSent: true })
 			.where(eq(notifications.id, id))
 			.returning();
 		return result.length > 0;
@@ -510,7 +519,7 @@ export class DatabaseStorage implements IStorage {
 		const pendingNotifications = await db
 			.select()
 			.from(notifications)
-			.where(and(eq(notifications.isEmailSent, false), eq(notifications.isRead, false)));
+			.where(and(eq(notifications.emailSent, false), eq(notifications.isRead, false)));
 
 		if (pendingNotifications.length === 0) {
 			return [];
@@ -571,7 +580,7 @@ export class DatabaseStorage implements IStorage {
 		}
 	}
 
-	// Update the `addBookmark` method to use `sql` for parameterized queries
+	// Update the addBookmark method to use result.rows[0]
 	async addBookmark({
 		userId,
 		discussionId,
@@ -581,19 +590,11 @@ export class DatabaseStorage implements IStorage {
 		discussionId: number;
 		saveDiscussionThread: boolean;
 	}) {
-		console.log("addBookmark called with:", {
-			userId,
-			discussionId,
-			saveDiscussionThread,
-		});
-		console.log("Checking if db is defined:", typeof db);
-
 		try {
 			const result = await db.execute(
-				sql`INSERT INTO bookmarks (user_id, discussion_id,save_discussion_thread) VALUES (${userId}, ${discussionId}, ${saveDiscussionThread}) RETURNING *`
+				sql`INSERT INTO bookmarks (user_id, discussion_id, save_discussion_thread) VALUES (${userId}, ${discussionId}, ${saveDiscussionThread}) RETURNING *`
 			);
-			console.log("Query result:", result);
-			return result[0];
+			return result.rows[0];
 		} catch (error) {
 			console.error("Error executing addBookmark query:", error);
 			throw error;
