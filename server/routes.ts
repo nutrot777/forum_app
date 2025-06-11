@@ -891,7 +891,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/delete-bookmark", async (req: Request, res: Response) => {
     try {
       // Not implemented: removeBookmark
-      return res.status(501).json({ message: "Bookmark removal not implemented" });
+      // return res.status(501).json({ message: "Bookmark removal not implemented" });
+      const { userId, discussionId } = req.body;
+
+      if (!userId || !discussionId) {
+        return res.status(400).json({ message: "Invalid request parameters" });
+      }
+
+      const result = await storage.removeBookmark(
+        parseInt(userId),
+        parseInt(discussionId),
+      );
+
+      if (!result) {
+        return res.status(404).json({ message: "Bookmark not found" });
+      }
+
+      res.status(200).json({ message: "Bookmark removed successfully" });
     } catch (error) {
       res.status(400).json({
         message: error instanceof Error ? error.message : "Invalid request",
