@@ -888,8 +888,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Fix /api/bookmarks DELETE route
-  app.delete("/api/bookmarks", async (req: Request, res: Response) => {
+  app.delete("/api/delete-bookmark", async (req: Request, res: Response) => {
     try {
       // Not implemented: removeBookmark
       return res.status(501).json({ message: "Bookmark removal not implemented" });

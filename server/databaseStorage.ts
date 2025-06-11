@@ -568,17 +568,35 @@ export class DatabaseStorage implements IStorage {
 				.innerJoin(users, eq(discussions.userId, users.id))
 				.where(eq(bookmarks.userId, userId));
 
-			// console.log("Query result with users:", result);
-			return result.map(({ discussions, users, bookmarks }) => ({
-				...discussions,
-				user: users,
-				bookmark: bookmarks,
-			}));
-		} catch (error) {
-			console.error("Error executing getBookmarkedDiscussions query:", error);
-			throw error;
-		}
-	}
+      // console.log("Query result with users:", result);
+      return result.map(({ discussions, users, bookmarks }) => ({
+        ...discussions,
+        user: users,
+        bookmark: bookmarks,
+      }));
+    } catch (error) {
+      console.error("Error executing getBookmarkedDiscussions query:", error);
+      throw error;
+    }
+  }
+
+  async removeBookmark(userId: number, disscussionID: number) {
+    try {
+      const results = await db
+        .delete(bookmarks)
+        .where(
+          and(
+            eq(bookmarks.userId, userId),
+            eq(bookmarks.discussionId, disscussionID),
+          ),
+        );
+      console.log(results);
+      return results;
+    } catch (error) {
+      console.error("Error executing deleteBookmard query:", error);
+      throw error;
+    }
+  }
 
 	// Update the addBookmark method to use result.rows[0]
 	async addBookmark({

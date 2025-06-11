@@ -176,6 +176,32 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({ discussion, filter 
 		}
 	};
 
+	const handleDeleteBookmark = async () => {
+		if (!user) return;
+
+		try {
+
+			const res = await apiRequest("DELETE", "/api/delete-bookmark", {
+				userId: user.id,
+				discussionId: discussion.id,
+			})
+			console.log("bookdeleted: ", res)
+			setIsBookmarked(false);
+			toast({
+				title: "Success",
+				description: "Bookmark successfully deleted",
+			});
+		} catch (error) {
+			toast({
+				title: "Error",
+				description: error instanceof Error ? error.message : "Failed to delete discussion",
+				variant: "destructive",
+			});
+
+		}
+
+	}
+
 	const handleSaveEdit = async () => {
 		if (!user || user.id !== discussion.userId) return;
 
@@ -477,6 +503,17 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({ discussion, filter 
 										>
 											Save Continuous Update
 										</Button>
+										{
+											isBookmarked ? <Button
+												variant="outline"
+												className="text-sm text-gray-600 hover:text-[#0079D3] hover:border-[#0079D3]"
+												// onClick={() => handleSaveOption("current")}
+												onClick={() => handleDeleteBookmark()}
+											>
+												Delete Bookmark
+											</Button>
+												: null
+										}
 									</div>
 								</PopoverContent>
 							</Popover>

@@ -632,4 +632,5 @@ export const storage = {
   getPendingEmailNotifications: databaseStorage.getPendingEmailNotifications.bind(databaseStorage),
   getBookmarkedDiscussions: databaseStorage.getBookmarkedDiscussions.bind(databaseStorage),
   addBookmark: databaseStorage.addBookmark.bind(databaseStorage),
+  removeBookmark: databaseStorage.removeBookmark.bind(databaseStorage),
 };
