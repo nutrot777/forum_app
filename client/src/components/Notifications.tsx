@@ -126,13 +126,15 @@ export function Notifications({ onClosePopover, onOpenDiscussion }: Notification
 
   // Fetch all notifications
   const { data: notifications, isLoading } = useQuery<NotificationType[]>({
-    queryKey: ['/api/notifications'],
+    queryKey: ['/api/notifications', user?.id],
+    queryFn: async () => user ? (await apiRequest("GET", `/api/notifications?userId=${user.id}`)).json() : [],
     enabled: !!user,
   });
 
   // Get unread count
   const { data: unreadData } = useQuery<{ count: number }>({
-    queryKey: ['/api/notifications/unread/count'],
+    queryKey: ['/api/notifications/unread/count', user?.id],
+    queryFn: async () => user ? (await apiRequest("GET", `/api/notifications/unread/count?userId=${user.id}`)).json() : { count: 0 },
     enabled: !!user,
   });
   
@@ -144,8 +146,8 @@ export function Notifications({ onClosePopover, onOpenDiscussion }: Notification
       return apiRequest("PATCH", `/api/notifications/${id}/read`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/notifications'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/notifications/unread/count'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/notifications', user?.id] });
+      queryClient.invalidateQueries({ queryKey: ['/api/notifications/unread/count', user?.id] });
     },
     onError: (error) => {
       toast({
@@ -159,11 +161,11 @@ export function Notifications({ onClosePopover, onOpenDiscussion }: Notification
   // Mark all as read
   const markAllAsReadMutation = useMutation({
     mutationFn: async () => {
-      return apiRequest("PATCH", '/api/notifications/read/all');
+      return apiRequest("PATCH", `/api/notifications/mark-all-read?userId=${user?.id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/notifications'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/notifications/unread/count'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/notifications', user?.id] });
+      queryClient.invalidateQueries({ queryKey: ['/api/notifications/unread/count', user?.id] });
       toast({
         title: "Success",
         description: "All notifications marked as read",
@@ -184,8 +186,8 @@ export function Notifications({ onClosePopover, onOpenDiscussion }: Notification
       return apiRequest("DELETE", `/api/notifications/${id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/notifications'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/notifications/unread/count'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/notifications', user?.id] });
+      queryClient.invalidateQueries({ queryKey: ['/api/notifications/unread/count', user?.id] });
     },
     onError: (error) => {
       toast({

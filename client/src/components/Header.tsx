@@ -127,13 +127,15 @@ const Header: React.FC = () => {
 // NotificationCountBadge component
 function NotificationCountBadge() {
   const { user } = useAuth();
-  const { data } = useQuery<{ count: number }>({
-    queryKey: ["/api/notifications/unread/count"],
+  const { data, isFetching } = useQuery<{ count: number }>({
+    queryKey: ["/api/notifications/unread/count", user?.id],
+    queryFn: async () => user ? (await fetch(`/api/notifications/unread/count?userId=${user.id}`)).json() : { count: 0 },
     enabled: !!user,
+    refetchInterval: 5000, // Poll every 5 seconds for real-time updates
   });
   if (!user || !data?.count) return null;
   return (
-    <Badge className="absolute -top-1 -right-1 px-1.5 py-0.5 text-xs bg-red-500 text-white rounded-full">
+    <Badge className="absolute -top-1 -right-1 px-1.5 py-0.5 text-xs bg-red-500 text-white rounded-full animate-pulse">
       {data.count}
     </Badge>
   );

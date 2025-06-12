@@ -986,5 +986,77 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Serve uploaded files
   app.use("/uploads", express.static(uploadsDir));
 
+  // --- Notification Endpoints ---
+
+  // Get unread notifications count
+  app.get("/api/notifications/unread/count", async (req: Request, res: Response) => {
+    try {
+      const userId = req.body?.userId || req.query?.userId;
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      const count = await storage.getUnreadNotificationsCount(parseInt(userId));
+      res.status(200).json({ count });
+    } catch (error) {
+      res.status(500).json({
+        message: error instanceof Error ? error.message : "Server error",
+      });
+    }
+  });
+
+  // Mark a notification as read
+  app.patch("/api/notifications/:id/read", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "Invalid notification ID" });
+      }
+      const notification = await storage.markNotificationAsRead(id);
+      if (!notification) {
+        return res.status(404).json({ message: "Notification not found" });
+      }
+      res.status(200).json(notification);
+    } catch (error) {
+      res.status(500).json({
+        message: error instanceof Error ? error.message : "Server error",
+      });
+    }
+  });
+
+  // Mark all notifications as read
+  app.patch("/api/notifications/mark-all-read", async (req: Request, res: Response) => {
+    try {
+      const userId = req.body?.userId || req.query?.userId;
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      const result = await storage.markAllNotificationsAsRead(parseInt(userId));
+      res.status(200).json({ success: result });
+    } catch (error) {
+      res.status(500).json({
+        message: error instanceof Error ? error.message : "Server error",
+      });
+    }
+  });
+
+  // Delete a notification
+  app.delete("/api/notifications/:id", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "Invalid notification ID" });
+      }
+      const result = await storage.deleteNotification(id);
+      if (!result) {
+        return res.status(404).json({ message: "Notification not found" });
+      }
+      res.status(200).json({ success: true });
+    } catch (error) {
+      res.status(500).json({
+        message: error instanceof Error ? error.message : "Server error",
+      });
+    }
+  });
+
   return httpServer;
 }
