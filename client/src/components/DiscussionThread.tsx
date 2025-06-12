@@ -91,8 +91,7 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({ discussion, filter 
 			}
 		};
 		checkBookmark();
-		// }, [user, discussion.id]);
-	}, [user, discussion.id, isBookmarked, filter]);
+	}, [user, discussion.id, filter]); // removed isBookmarked from deps
 
 	// Run on component mount
 	useEffect(() => {
@@ -134,73 +133,35 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({ discussion, filter 
 					userId: user.id,
 					discussionId: discussion.id,
 				});
+				// Always re-check status from backend after toggle
+				const response = await fetch(`/api/bookmarks/check?userId=${user.id}&discussionId=${discussion.id}`);
+				const data = await response.json();
+				setIsBookmarked(data.isBookmarked);
+				toast({
+					title: "Bookmark removed",
+					description: "This discussion was removed from your saved list.",
+					variant: "default",
+					// position: 'top-right' // If your toast system supports positioning
+				});
 			} else {
 				await apiRequest("POST", "/api/bookmarks", {
 					userId: user.id,
 					discussionId: discussion.id,
 				});
+				const response = await fetch(`/api/bookmarks/check?userId=${user.id}&discussionId=${discussion.id}`);
+				const data = await response.json();
+				setIsBookmarked(data.isBookmarked);
+				toast({
+					title: "Discussion saved",
+					description: "This discussion was added to your saved list.",
+					variant: "default",
+					// position: 'top-right'
+				});
 			}
-			setIsBookmarked(!isBookmarked);
 		} catch (error) {
 			console.error("Failed to toggle bookmark:", error);
 		}
 	};
-
-	const handleSaveOption = async (option: "current" | "continuous") => {
-		if (!user) return;
-		try {
-			if (option === "current") {
-				await apiRequest("POST", "/api/bookmarks", {
-					userId: user.id,
-					discussionId: discussion.id,
-					saveType: "current",
-				});
-			} else {
-				await apiRequest("POST", "/api/bookmarks", {
-					userId: user.id,
-					discussionId: discussion.id,
-					saveType: "continuous",
-				});
-			}
-			setIsBookmarked(true);
-			toast({
-				title: "Success",
-				description: `Discussion saved as ${option === "current" ? "current thread" : "continuous update"}`,
-			});
-		} catch (error) {
-			toast({
-				title: "Error",
-				description: error instanceof Error ? error.message : "Failed to save discussion",
-				variant: "destructive",
-			});
-		}
-	};
-
-	const handleDeleteBookmark = async () => {
-		if (!user) return;
-
-		try {
-
-			const res = await apiRequest("DELETE", "/api/delete-bookmark", {
-				userId: user.id,
-				discussionId: discussion.id,
-			})
-			console.log("bookdeleted: ", res)
-			setIsBookmarked(false);
-			toast({
-				title: "Success",
-				description: "Bookmark successfully deleted",
-			});
-		} catch (error) {
-			toast({
-				title: "Error",
-				description: error instanceof Error ? error.message : "Failed to delete discussion",
-				variant: "destructive",
-			});
-
-		}
-
-	}
 
 	const handleSaveEdit = async () => {
 		if (!user || user.id !== discussion.userId) return;
@@ -472,51 +433,14 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({ discussion, filter 
 										: ""}
 								</span>
 							</Button>
-							<Popover>
-								<PopoverTrigger>
-									<Button
-										variant="ghost"
-										className="flex items-center text-gray-600 hover:text-[#0079D3]"
-									>
-										<Bookmark
-											className={`h-4 w-4 mr-1 ${
-												isBookmarked ? "fill-current text-[#0079D3]" : ""
-											}`}
-										/>
-										<span>Save</span>
-									</Button>
-								</PopoverTrigger>
-								<PopoverContent className="p-4 bg-white shadow-lg rounded-md border border-gray-200">
-									<h4 className="text-sm font-medium text-gray-700 mb-2">Save Options</h4>
-									<div className="flex flex-col space-y-2">
-										<Button
-											variant="outline"
-											className="text-sm text-gray-600 hover:text-[#0079D3] hover:border-[#0079D3]"
-											onClick={() => handleSaveOption("current")}
-										>
-											Save Current Thread
-										</Button>
-										<Button
-											variant="outline"
-											className="text-sm text-gray-600 hover:text-[#0079D3] hover:border-[#0079D3]"
-											onClick={() => handleSaveOption("continuous")}
-										>
-											Save Continuous Update
-										</Button>
-										{
-											isBookmarked ? <Button
-												variant="outline"
-												className="text-sm text-gray-600 hover:text-[#0079D3] hover:border-[#0079D3]"
-												// onClick={() => handleSaveOption("current")}
-												onClick={() => handleDeleteBookmark()}
-											>
-												Delete Bookmark
-											</Button>
-												: null
-										}
-									</div>
-								</PopoverContent>
-							</Popover>
+							<Button
+								variant="ghost"
+								className={`flex items-center text-gray-600 hover:text-[#0079D3] ${isBookmarked ? "font-semibold text-[#0079D3]" : ""}`}
+								onClick={toggleBookmark}
+							>
+								<Bookmark className={`h-4 w-4 mr-1 ${isBookmarked ? "fill-current text-[#0079D3]" : ""}`} />
+								<span>Save</span>
+							</Button>
 							<Button
 								variant="ghost"
 								className="flex items-center text-gray-600 hover:text-[#0079D3]"

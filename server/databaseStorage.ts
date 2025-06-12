@@ -598,7 +598,7 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-	// Update the addBookmark method to use result.rows[0]
+	// Update the addBookmark method to upsert (insert or update) the bookmark
 	async addBookmark({
 		userId,
 		discussionId,
@@ -609,10 +609,36 @@ export class DatabaseStorage implements IStorage {
 		saveDiscussionThread: boolean;
 	}) {
 		try {
-			const result = await db.execute(
-				sql`INSERT INTO bookmarks (user_id, discussion_id, save_discussion_thread) VALUES (${userId}, ${discussionId}, ${saveDiscussionThread}) RETURNING *`
-			);
-			return result.rows[0];
+			// Check if bookmark exists
+			const [existing] = await db
+				.select()
+				.from(bookmarks)
+				.where(
+					and(
+						eq(bookmarks.userId, userId),
+						eq(bookmarks.discussionId, discussionId)
+					)
+				);
+			if (existing) {
+				// Update saveDiscussionThread value
+				const [updated] = await db
+					.update(bookmarks)
+					.set({ saveDiscussionThread })
+					.where(
+						and(
+							eq(bookmarks.userId, userId),
+							eq(bookmarks.discussionId, discussionId)
+						)
+					)
+					.returning();
+				return updated;
+			} else {
+				// Insert new bookmark
+				const result = await db.execute(
+					sql`INSERT INTO bookmarks (user_id, discussion_id, save_discussion_thread) VALUES (${userId}, ${discussionId}, ${saveDiscussionThread}) RETURNING *`
+				);
+				return result.rows[0];
+			}
 		} catch (error) {
 			console.error("Error executing addBookmark query:", error);
 			throw error;

@@ -859,24 +859,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Bookmark routes
   app.post("/api/bookmarks", async (req: Request, res: Response) => {
     try {
-      const { userId, discussionId, saveType } = req.body;
+      const { userId, discussionId } = req.body;
 
       if (!userId || !discussionId) {
         return res.status(400).json({ message: "Invalid request parameters" });
       }
-      //
-      // console.log(
-      //   "Checking if addBookmark exists on storage:",
-      //   typeof storage.addBookmark,
-      //   type,
-      // );
 
-      const saveDiscussionThread = saveType === "current";
-      console.log({ saveType, saveDiscussionThread });
+      // Always save as a simple bookmark (no saveType/saveDiscussionThread)
       const bookmark = await storage.addBookmark({
         userId: parseInt(userId),
         discussionId: parseInt(discussionId),
-        saveDiscussionThread,
+        saveDiscussionThread: false, // default/fixed value, not used in UI
       });
 
       res.status(201).json(bookmark);
