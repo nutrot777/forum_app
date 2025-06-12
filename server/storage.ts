@@ -605,6 +605,7 @@ export const storage = {
   getUser: databaseStorage.getUser.bind(databaseStorage),
   getUserByUsername: databaseStorage.getUserByUsername.bind(databaseStorage),
   createUser: databaseStorage.createUser.bind(databaseStorage),
+  updateUser: databaseStorage.updateUser.bind(databaseStorage),
   updateUserOnlineStatus: databaseStorage.updateUserOnlineStatus.bind(databaseStorage),
   getOnlineUsers: databaseStorage.getOnlineUsers.bind(databaseStorage),
   getDiscussions: databaseStorage.getDiscussions.bind(databaseStorage),
@@ -629,6 +630,7 @@ export const storage = {
   getUnreadNotificationsCount: databaseStorage.getUnreadNotificationsCount.bind(databaseStorage),
   markNotificationEmailSent: databaseStorage.markNotificationEmailSent.bind(databaseStorage),
   getPendingEmailNotifications: databaseStorage.getPendingEmailNotifications.bind(databaseStorage),
-  getBookmarkedDiscussions: databaseStorage.getBookmarkedDiscussions.bind(databaseStorage),
-  addBookmark: databaseStorage.addBookmark.bind(databaseStorage),
+  // getBookmarkedDiscussions: databaseStorage.getBookmarkedDiscussions.bind(databaseStorage),
+  // addBookmark: databaseStorage.addBookmark.bind(databaseStorage),
+  getTotalUserCount: databaseStorage.getTotalUserCount.bind(databaseStorage),
 };
