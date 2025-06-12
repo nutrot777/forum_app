@@ -242,7 +242,11 @@ export class DatabaseStorage implements IStorage {
 	}
 
 	async getRepliesByDiscussionId(discussionId: number): Promise<ReplyWithUser[]> {
-		const allRepliesRaw = await db.select().from(replies).where(eq(replies.discussionId, discussionId));
+		const allRepliesRaw = await db
+			.select()
+			.from(replies)
+			.where(eq(replies.discussionId, discussionId))
+			.orderBy(asc(replies.createdAt)); // Ensure stable order
 		const allReplies = allRepliesRaw.map(normalizeReply);
 		const userIds = Array.from(new Set(allReplies.map((r) => r.userId)));
 		let replyUsers: User[] = [];
@@ -282,6 +286,9 @@ export class DatabaseStorage implements IStorage {
 	async deleteReply(id: number): Promise<boolean> {
 		// First delete helpful marks for this reply
 		await db.delete(helpfulMarks).where(eq(helpfulMarks.replyId, id));
+
+		// Delete notifications for this reply
+		await db.delete(notifications).where(eq(notifications.replyId, id));
 
 		// Then delete the reply
 		const result = await db.delete(replies).where(eq(replies.id, id)).returning();

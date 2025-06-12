@@ -182,7 +182,7 @@ const CreatePost: React.FC<CreatePostProps> = ({ onSuccess, editingDiscussion })
 							<Button
 								variant="destructive"
 								size="icon"
-								className="absolute top-2 right-2 h-6 w-6 rounded-full"
+								className="absolute top-2 right-2 h-6 w-6 rounded-full focus:bg-transparent active:bg-transparent focus:ring-0 active:ring-0"
 								onClick={() => handleRemoveExistingImage(idx)}
 							>
 								✕
@@ -207,7 +207,7 @@ const CreatePost: React.FC<CreatePostProps> = ({ onSuccess, editingDiscussion })
 							<Button
 								variant="destructive"
 								size="icon"
-								className="absolute top-2 right-2 h-6 w-6 rounded-full"
+								className="absolute top-2 right-2 h-6 w-6 rounded-full focus:bg-transparent active:bg-transparent focus:ring-0 active:ring-0"
 								onClick={() => handleRemoveImage(idx)}
 							>
 								✕
@@ -229,7 +229,7 @@ const CreatePost: React.FC<CreatePostProps> = ({ onSuccess, editingDiscussion })
 					/>
 					<Button
 						variant="ghost"
-						className="flex items-center text-gray-600 hover:text-[#0079D3]"
+						className="flex items-center text-gray-600 hover:text-[#0079D3] focus:bg-transparent active:bg-transparent focus:ring-0 active:ring-0"
 						onClick={handleImageClick}
 					>
 						<Image className="h-5 w-5" />

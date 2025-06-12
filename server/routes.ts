@@ -443,10 +443,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         } else if (typeof req.body.captions === "string") {
           captions = [req.body.captions];
         }
+        // --- FIX: Parse parentId to number or null ---
+        let parentId: number | null = null;
+        if (req.body.parentId !== undefined && req.body.parentId !== null && req.body.parentId !== "") {
+          const parsed = Number(req.body.parentId);
+          parentId = isNaN(parsed) ? null : parsed;
+        }
         const data = {
           ...req.body,
           userId: parseInt(req.body.userId),
           discussionId: parseInt(req.body.discussionId),
+          parentId, // always number or null
           imagePaths,
           captions,
         };

@@ -12,6 +12,7 @@ interface ReplyFormProps {
   discussionId: number;
   parentId?: number;
   onSuccess?: (updatedReply?: any) => void;
+  onCancel?: () => void;
   editingReply?: {
     id: number;
     content: string;
@@ -20,7 +21,7 @@ interface ReplyFormProps {
   };
 }
 
-const ReplyForm: React.FC<ReplyFormProps> = ({ discussionId, parentId, onSuccess, editingReply }) => {
+const ReplyForm: React.FC<ReplyFormProps> = ({ discussionId, parentId, onSuccess, onCancel, editingReply }) => {
   const { user } = useAuth();
   const { toast } = useToast();
   const [content, setContent] = useState(editingReply ? editingReply.content : "");
@@ -165,7 +166,7 @@ const ReplyForm: React.FC<ReplyFormProps> = ({ discussionId, parentId, onSuccess
                     <Button
                       variant="destructive"
                       size="icon"
-                      className="absolute top-2 right-2 h-5 w-5 rounded-full"
+                      className="absolute top-2 right-2 h-5 w-5 rounded-full focus:bg-transparent active:bg-transparent focus:ring-0 active:ring-0"
                       onClick={() => handleRemoveExistingImage(idx)}
                     >
                       ✕
@@ -189,7 +190,7 @@ const ReplyForm: React.FC<ReplyFormProps> = ({ discussionId, parentId, onSuccess
                     <Button
                       variant="destructive"
                       size="icon"
-                      className="absolute top-2 right-2 h-5 w-5 rounded-full"
+                      className="absolute top-2 right-2 h-5 w-5 rounded-full focus:bg-transparent active:bg-transparent focus:ring-0 active:ring-0"
                       onClick={() => handleRemoveImage(idx)}
                     >
                       ✕
@@ -198,7 +199,6 @@ const ReplyForm: React.FC<ReplyFormProps> = ({ discussionId, parentId, onSuccess
                 ))}
               </div>
             )}
-            
             <div className="flex justify-between items-center mt-2">
               <input
                 type="file"
@@ -212,19 +212,31 @@ const ReplyForm: React.FC<ReplyFormProps> = ({ discussionId, parentId, onSuccess
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="text-gray-600 text-sm hover:text-[#0079D3]"
+                className="text-gray-600 text-sm hover:text-[#0079D3] focus:bg-transparent active:bg-transparent focus:ring-0 active:ring-0"
                 onClick={handleImageClick}
               >
                 <Image className="h-4 w-4 mr-1" />
                 Add Images
               </Button>
-              <Button
-                type="submit"
-                className="px-3 py-1.5 bg-[#0079D3] text-white text-sm rounded-md hover:bg-[#0079D3]/90"
-                disabled={isSubmitting}
-              >
-                {isSubmitting ? "Posting..." : "Post Reply"}
-              </Button>
+              <div className="flex gap-2">
+                {editingReply && onCancel && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="text-gray-600 border-gray-300"
+                    onClick={onCancel}
+                  >
+                    Cancel
+                  </Button>
+                )}
+                <Button
+                  type="submit"
+                  className="px-3 py-1.5 bg-[#0079D3] text-white text-sm rounded-md hover:bg-[#0079D3]/90"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? (editingReply ? "Editing..." : "Posting...") : (editingReply ? "Edit Reply" : "Post Reply")}
+                </Button>
+              </div>
             </div>
           </div>
         </div>

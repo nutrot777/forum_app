@@ -102,19 +102,21 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({ discussion, filter 
 		if (!user) return;
 		try {
 			if (isMarked) {
+				setIsMarked(false); // Optimistic update
 				await apiRequest("DELETE", "/api/helpful", {
 					userId: user.id,
 					discussionId: discussion.id,
 					type: "upvote",
 				});
 			} else {
+				setIsMarked(true); // Optimistic update
 				await apiRequest("POST", "/api/helpful", {
 					userId: user.id,
 					discussionId: discussion.id,
 					type: "upvote",
 				});
 			}
-			await checkIfMarkedAsHelpful(); // Ensure arrow color updates correctly
+			await checkIfMarkedAsHelpful(); // Confirm with backend
 			refetch();
 		} catch (error) {
 			toast({
@@ -129,11 +131,11 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({ discussion, filter 
 		if (!user) return;
 		try {
 			if (isBookmarked) {
-				await apiRequest("DELETE", "/api/bookmarks", {
+				setIsBookmarked(false);
+				await apiRequest("DELETE", "/api/delete-bookmark", {
 					userId: user.id,
 					discussionId: discussion.id,
 				});
-				// Always re-check status from backend after toggle
 				const response = await fetch(`/api/bookmarks/check?userId=${user.id}&discussionId=${discussion.id}`);
 				const data = await response.json();
 				setIsBookmarked(data.isBookmarked);
@@ -141,9 +143,9 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({ discussion, filter 
 					title: "Bookmark removed",
 					description: "This discussion was removed from your saved list.",
 					variant: "default",
-					// position: 'top-right' // If your toast system supports positioning
 				});
 			} else {
+				setIsBookmarked(true);
 				await apiRequest("POST", "/api/bookmarks", {
 					userId: user.id,
 					discussionId: discussion.id,
@@ -155,7 +157,6 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({ discussion, filter 
 					title: "Discussion saved",
 					description: "This discussion was added to your saved list.",
 					variant: "default",
-					// position: 'top-right'
 				});
 			}
 		} catch (error) {
@@ -307,6 +308,7 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({ discussion, filter 
 							size="sm"
 							aria-label="Mark as helpful"
 							onClick={handleToggleHelpful}
+							className="focus:bg-transparent active:bg-transparent focus:ring-0 active:ring-0"
 						>
 							<ArrowUp className={`h-6 w-6 mr-1 ${isMarked ? 'text-[#FF4500]' : 'text-gray-400'} hover:text-[#FF4500]'`} />
 						</Button>
@@ -437,7 +439,7 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({ discussion, filter 
 							</Button>
 							<Button
 								variant="ghost"
-								className={`flex items-center text-gray-600 hover:text-[#0079D3] ${isBookmarked ? "font-semibold text-[#0079D3]" : ""}`}
+								className={`flex items-center text-gray-600 hover:text-[#0079D3] ${isBookmarked ? "font-semibold text-[#0079D3]" : ""} focus:bg-transparent active:bg-transparent focus:ring-0 active:ring-0`}
 								onClick={toggleBookmark}
 							>
 								<Bookmark className={`h-4 w-4 mr-1 ${isBookmarked ? "fill-current text-[#0079D3]" : ""}`} />
