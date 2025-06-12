@@ -10,6 +10,7 @@ import Settings from "@/pages/Settings";
 import DiscussionPage from "@/pages/Discussion";
 import { AuthProvider } from "@/hooks/useAuth";
 import Layout from "@/components/Layout";
+import { useNotificationWebSocket } from "@/hooks/useNotificationWebSocket";
 
 function Router() {
   return (
@@ -23,15 +24,22 @@ function Router() {
   );
 }
 
+function NotificationWebSocketProvider({ children }: { children: React.ReactNode }) {
+  useNotificationWebSocket();
+  return children;
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <AuthProvider>
-          <Layout>
-            <Router />
-            <Toaster />
-          </Layout>
+          <NotificationWebSocketProvider>
+            <Layout>
+              <Router />
+              <Toaster />
+            </Layout>
+          </NotificationWebSocketProvider>
         </AuthProvider>
       </TooltipProvider>
     </QueryClientProvider>

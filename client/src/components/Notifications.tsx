@@ -131,7 +131,7 @@ export function Notifications({ onClosePopover, onOpenDiscussion }: Notification
   });
 
   // Get unread count
-  const { data: unreadData } = useQuery<{ count: number }>({
+  const { data: unreadData } = useQuery<{ count: number}>({
     queryKey: ['/api/notifications/unread/count'],
     enabled: !!user,
   });
@@ -196,8 +196,11 @@ export function Notifications({ onClosePopover, onOpenDiscussion }: Notification
     }
   });
 
-  // When a notification is clicked, close the popover and call onOpenDiscussion
-  const handleOpenDiscussion = (discussionId: number) => {
+  // When a notification is clicked, mark as read and open discussion
+  const handleOpenDiscussion = (discussionId: number, notificationId?: number, isRead?: boolean) => {
+    if (notificationId && !isRead) {
+      markAsReadMutation.mutate(notificationId);
+    }
     if (onClosePopover) onClosePopover();
     onOpenDiscussion(discussionId);
   };
@@ -227,7 +230,7 @@ export function Notifications({ onClosePopover, onOpenDiscussion }: Notification
                 notification={notification} 
                 onRead={(id) => markAsReadMutation.mutate(id)}
                 onDelete={(id) => deleteNotificationMutation.mutate(id)}
-                onOpenDiscussion={handleOpenDiscussion}
+                onOpenDiscussion={() => handleOpenDiscussion(notification.discussionId!, notification.id, notification.isRead)}
               />
             ))}
           </ScrollArea>

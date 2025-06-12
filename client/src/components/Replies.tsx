@@ -29,10 +29,16 @@ interface RepliesProps {
 }
 
 const Replies: React.FC<RepliesProps> = ({ discussionId, replies, onReplySuccess }) => {
+  // Defensive sort by createdAt (chronological order)
+  const sortedReplies = [...(replies || [])].sort((a, b) => {
+    if (!a.createdAt || !b.createdAt) return 0;
+    return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+  });
+
   return (
     <div className="border-t border-gray-100 px-4 py-3 bg-gray-50 rounded-b-lg">
-      <h4 className="font-ibm font-medium text-sm mb-2">Replies ({replies?.length || 0})</h4>
-      {replies && replies.length > 0 && replies.map((reply) => (
+      <h4 className="font-ibm font-medium text-sm mb-2">Replies ({sortedReplies.length || 0})</h4>
+      {sortedReplies.length > 0 && sortedReplies.map((reply) => (
         <ReplyItem 
           key={reply.id} 
           reply={reply} 
@@ -85,7 +91,6 @@ const ReplyItem: React.FC<ReplyItemProps> = ({ reply, discussionId, depth = 0, o
   
   const handleToggleHelpful = async () => {
     if (!user) return;
-    
     try {
       if (isMarked) {
         await apiRequest("DELETE", "/api/helpful", {
@@ -94,6 +99,7 @@ const ReplyItem: React.FC<ReplyItemProps> = ({ reply, discussionId, depth = 0, o
           type: "upvote"
         });
         setHelpfulCount(prev => Math.max(0, (prev || 0) - 1));
+        setIsMarked(false); // Set immediately for instant UI feedback
       } else {
         await apiRequest("POST", "/api/helpful", {
           userId: user.id,
@@ -101,7 +107,9 @@ const ReplyItem: React.FC<ReplyItemProps> = ({ reply, discussionId, depth = 0, o
           type: "upvote"
         });
         setHelpfulCount(prev => (prev || 0) + 1);
+        setIsMarked(true); // Set immediately for instant UI feedback
       }
+      // Optionally, still check backend for consistency, but UI updates instantly
       await checkIfMarkedAsHelpful();
       console.log("After toggle, isMarked is:", isMarked);
     } catch (error) {

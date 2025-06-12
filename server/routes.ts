@@ -2,7 +2,6 @@ import type { Express, Request, Response, NextFunction } from "express";
 import express from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import session from "express-session"; // Add session middleware
 import {
   insertUserSchema,
   insertDiscussionSchema,
@@ -72,30 +71,47 @@ async function uploadToCloudinary(file: Express.Multer.File) {
 }
 
 // WebSocket clients for online status tracking
-const clients = new Map<string, { userId: number; lastSeen: Date }>();
+const clients = new Map<string, { userId: number; ws: import("ws").WebSocket }>();
 
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
 
-  // Ensure session middleware is used
-  app.use(
-    session({
-      secret: "your-secret-key", // Replace with a secure secret key
-      resave: false,
-      saveUninitialized: true,
-    }),
-  );
+  // --- Enable WebSocket for real-time notifications ---
+  const wss = new WebSocketServer({ server: httpServer, path: "/ws" });
+  wss.on("connection", (ws, req) => {
+    const url = new URL(req.url || '', `http://${req.headers.host}`);
+    const userId = url.searchParams.get("userId");
+    if (userId) {
+      // If a previous connection exists for this user, close it first
+      const existing = clients.get(userId);
+      if (existing && existing.ws.readyState === existing.ws.OPEN) {
+        existing.ws.close(4000, "Another session opened");
+      }
+      clients.set(userId, { userId: parseInt(userId), ws });
+      console.log(`[WebSocket] User ${userId} connected`);
+      ws.on("close", () => {
+        // Only remove if the same ws instance is still mapped
+        const current = clients.get(userId);
+        if (current && current.ws === ws) {
+          clients.delete(userId);
+          console.log(`[WebSocket] User ${userId} disconnected`);
+        }
+      });
+    } else {
+      console.log(`[WebSocket] Connection attempt without userId`);
+    }
+  });
 
-  // Temporarily disable WebSocket for troubleshooting
-  console.log(
-    "WebSocket functionality is temporarily disabled for troubleshooting",
-  );
-
-  // Set default online count to 1 for testing
-  //await storage.updateUserOnlineStatus(1, true);
-
-  // --- REMOVE TEST ROUTES AND DEBUG LOGGING ---
-  // (No /api/test route, no debug logs)
+  // Helper to send notification event to a user
+  function sendNotificationToUser(userId: number, payload: any) {
+    const client = clients.get(String(userId));
+    if (client && client.ws.readyState === client.ws.OPEN) {
+      client.ws.send(JSON.stringify(payload));
+      console.log(`[WebSocket] Sent notification to user ${userId}`);
+    } else {
+      console.log(`[WebSocket] Tried to send notification to user ${userId}, but no active connection`);
+    }
+  }
 
   // API Routes
   // Auth routes
@@ -146,7 +162,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Don't return password in response
       const { password: _, ...userWithoutPassword } = user;
-      req.session.userId = user.id;
+      (req.session as any).userId = user.id;
       await new Promise <void>((resolve, reject) => {
         req.session.save((err) => (err ? reject(err) : resolve()));
       });
@@ -167,7 +183,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       await storage.updateUserOnlineStatus(userId, false);
-      req.session.userId = null;
+      (req.session as any).userId = null;
       await new Promise <void>((resolve, reject) => {
         req.session.save((err) => (err ? reject(err) : resolve()));
       });
@@ -206,6 +222,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const filter = (req.query.filter as string) || "recent";
       const discussions = await storage.getDiscussions(filter);
+      // Commented out noisy debug log
+      // console.log(discussions);
       res.status(200).json(discussions);
     } catch (error) {
       res.status(500).json({
@@ -227,6 +245,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!discussion) {
         return res.status(404).json({ message: "Discussion not found" });
       }
+
+      // Debug log: print discussion object including replies
+      console.log("[DEBUG] /api/discussions/:id response:", JSON.stringify(discussion, null, 2));
 
       res.status(200).json(discussion);
     } catch (error) {
@@ -266,6 +287,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         };
         const validatedData = insertDiscussionSchema.parse(data);
         const discussion = await storage.createDiscussion(validatedData);
+        // WebSocket: Notify all users about new discussion
+        Array.from(clients.values()).forEach(client => {
+          if (client.ws.readyState === client.ws.OPEN) {
+            client.ws.send(JSON.stringify({ type: "discussion", discussionId: discussion.id }));
+          }
+        });
         res.status(201).json(discussion);
       } catch (error) {
         console.error("[ERROR] /api/discussions:", error);
@@ -347,7 +374,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 await cloudinary.uploader.destroy(publicId);
               }
             } catch (err) {
-              console.error("Failed to delete image from Cloudinary (edit):", url, err);
+              console.error("Failed to delete image from Cloudinary:", url, err);
             }
           }
         }
@@ -359,6 +386,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           captions: mergedCaptions,
         };
         const updatedDiscussion = await storage.updateDiscussion(id, data);
+        // WebSocket: Notify all users about updated discussion
+        if (updatedDiscussion && updatedDiscussion.id) {
+          Array.from(clients.values()).forEach(client => {
+            if (client.ws.readyState === client.ws.OPEN) {
+              client.ws.send(JSON.stringify({ type: "discussion", discussionId: updatedDiscussion.id }));
+            }
+          });
+        }
         res.status(200).json(updatedDiscussion);
       } catch (error) {
         res.status(400).json({
@@ -415,7 +450,76 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       await storage.deleteDiscussion(id);
+      // WebSocket: Notify all users about deleted discussion
+      Array.from(clients.values()).forEach(client => {
+        if (client.ws.readyState === client.ws.OPEN) {
+          client.ws.send(JSON.stringify({ type: "discussion", discussionId: id, deleted: true }));
+        }
+      });
       res.status(200).json({ message: "Discussion deleted successfully" });
+    } catch (error) {
+      console.error("[ERROR] /api/discussions/:id DELETE:", error);
+      res.status(500).json({ message: "Failed to delete discussion" });
+    }
+  });
+
+  // --- REPLY ROUTES ---
+  app.post("/api/replies", upload.array("images", 10), async (req: Request, res: Response) => {
+    try {
+      const files = req.files as Express.Multer.File[];
+      let imagePaths: string[] = [];
+      if (files && files.length > 0) {
+        imagePaths = await Promise.all(
+          files.map((file) => uploadToCloudinary(file).then((r) => r.url)),
+        );
+      }
+      let captions: string[] = [];
+      if (Array.isArray(req.body.captions)) {
+        captions = req.body.captions;
+      } else if (typeof req.body.captions === "string") {
+        captions = [req.body.captions];
+      }
+      const data = {
+        ...req.body,
+        userId: parseInt(req.body.userId),
+        discussionId: parseInt(req.body.discussionId),
+        parentId: req.body.parentId ? parseInt(req.body.parentId) : null,
+        imagePaths,
+        captions,
+      };
+      const validatedData = insertReplySchema.parse(data);
+      const reply = await storage.createReply(validatedData);
+      // WebSocket: Notify all users about new reply
+      Array.from(clients.values()).forEach(client => {
+        if (client.ws.readyState === client.ws.OPEN) {
+          client.ws.send(JSON.stringify({ type: "reply", discussionId: reply.discussionId }));
+        }
+      });
+      // --- Send notification to the recipient (discussion owner, unless replying to a reply) ---
+      // Find the recipient userId (discussion owner or parent reply owner)
+      let recipientUserId: number | undefined = undefined;
+      if (reply.parentId) {
+        const parentReply = await storage.getReplyById(reply.parentId);
+        if (parentReply) recipientUserId = parentReply.userId;
+      } else {
+        const discussion = await storage.getDiscussionById(reply.discussionId);
+        if (discussion) recipientUserId = discussion.user.id;
+      }
+      // Don't notify yourself
+      if (recipientUserId && recipientUserId !== reply.userId) {
+        // Create notification in DB
+        await storage.createNotification({
+          userId: recipientUserId,
+          triggeredByUserId: reply.userId,
+          discussionId: reply.discussionId,
+          replyId: reply.id,
+          type: "reply",
+          message: `${req.body.username || "Someone"} replied to your post`,
+        });
+        // WebSocket: Notify recipient
+        sendNotificationToUser(recipientUserId, { type: "notification" });
+      }
+      res.status(201).json(reply);
     } catch (error) {
       res.status(400).json({
         message: error instanceof Error ? error.message : "Invalid request",
@@ -423,301 +527,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Reply routes
-  app.post(
-    "/api/replies",
-    upload.array("images", 5),
-    async (req: Request, res: Response) => {
-      try {
-        const files = req.files as Express.Multer.File[];
-        let imagePaths: string[] = [];
-        if (files && files.length > 0) {
-          imagePaths = await Promise.all(
-            files.map((file) => uploadToCloudinary(file).then((r) => r.url)),
-          );
+  app.patch("/api/replies/:id", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid reply ID" });
+      const data = { ...req.body };
+      if (data.userId) data.userId = parseInt(data.userId);
+      if (data.parentId) data.parentId = parseInt(data.parentId);
+      const reply = await storage.updateReply(id, data);
+      if (!reply) return res.status(404).json({ message: "Reply not found" });
+      // WebSocket: Notify all users about updated reply
+      Array.from(clients.values()).forEach(client => {
+        if (client.ws.readyState === client.ws.OPEN) {
+          client.ws.send(JSON.stringify({ type: "reply", discussionId: reply.discussionId }));
         }
-        // Captions: support array or single string
-        let captions: string[] = [];
-        if (Array.isArray(req.body.captions)) {
-          captions = req.body.captions;
-        } else if (typeof req.body.captions === "string") {
-          captions = [req.body.captions];
-        }
-        const data = {
-          ...req.body,
-          userId: parseInt(req.body.userId),
-          discussionId: parseInt(req.body.discussionId),
-          imagePaths,
-          captions,
-        };
-        const validatedData = insertReplySchema.parse(data);
-        const reply = await storage.createReply(validatedData);
-
-        // Get the reply with user data
-        const user = await storage.getUser(reply.userId);
-        if (!user) {
-          return res.status(404).json({ message: "User not found" });
-        }
-
-        // Create notification for the discussion creator
-        const discussion = await storage.getDiscussionById(reply.discussionId);
-        if (discussion && discussion.userId !== reply.userId) {
-          // If replying to someone else's discussion
-          try {
-            const notificationData = {
-              userId: discussion.userId,
-              triggeredByUserId: reply.userId,
-              discussionId: discussion.id,
-              replyId: reply.id,
-              type: "reply",
-              message: `${user.username} replied to your discussion "${discussion.title}"`,
-            };
-
-            const notification =
-              await storage.createNotification(notificationData);
-
-            // Send email notification if the user has email and notifications enabled
-            const discussionCreator = await storage.getUser(discussion.userId);
-            if (
-              discussionCreator &&
-              discussionCreator.email &&
-              discussionCreator.emailNotifications
-            ) {
-              const emailContent = generateReplyNotificationEmail(
-                discussionCreator.username,
-                user.username,
-                discussion.title,
-                reply.content,
-                discussion.id,
-              );
-
-              await sendEmail(
-                discussionCreator.email,
-                `New reply to your discussion: ${discussion.title}`,
-                emailContent.text,
-                emailContent.html,
-              );
-
-              await storage.markNotificationEmailSent(notification.id);
-            }
-          } catch (error) {
-            console.error("Error creating notification:", error);
-            // Don't fail the whole request if notification creation fails
-          }
-        }
-
-        // If it's a reply to another reply, notify that person too
-        if (reply.parentId) {
-          const parentReply = await storage.getReplyById(reply.parentId);
-          if (parentReply && parentReply.userId !== reply.userId) {
-            try {
-              const notificationData = {
-                userId: parentReply.userId,
-                triggeredByUserId: reply.userId,
-                discussionId: reply.discussionId,
-                replyId: reply.id,
-                type: "reply",
-                message: `${user.username} replied to your comment`,
-              };
-
-              const notification =
-                await storage.createNotification(notificationData);
-
-              // Send email notification
-              const parentReplyCreator = await storage.getUser(
-                parentReply.userId,
-              );
-              if (
-                parentReplyCreator &&
-                parentReplyCreator.email &&
-                parentReplyCreator.emailNotifications
-              ) {
-                const emailContent = generateReplyNotificationEmail(
-                  parentReplyCreator.username,
-                  user.username,
-                  discussion?.title || "a discussion", // Fallback if discussion not found
-                  reply.content,
-                  reply.discussionId,
-                );
-
-                await sendEmail(
-                  parentReplyCreator.email,
-                  `New reply to your comment`,
-                  emailContent.text,
-                  emailContent.html,
-                );
-
-                await storage.markNotificationEmailSent(notification.id);
-              }
-            } catch (error) {
-              console.error(
-                "Error creating notification for reply parent:",
-                error,
-              );
-            }
-          }
-        }
-
-        const { password, ...userWithoutPassword } = user;
-
-        res.status(201).json({
-          ...reply,
-          user: userWithoutPassword,
-          childReplies: [],
-        });
-      } catch (error) {
-        console.error("Error creating reply:", error);
-        res.status(400).json({
-          message: error instanceof Error ? error.message : "Invalid request",
-        });
-      }
-    },
-  );
-
-  app.patch(
-    "/api/replies/:id",
-    upload.array("images", 5),
-    async (req: Request, res: Response) => {
-      try {
-        const id = parseInt(req.params.id);
-        const userId = parseInt(req.body.userId);
-        if (isNaN(id)) {
-          return res.status(400).json({ message: "Invalid reply ID" });
-        }
-        // Get reply by ID
-        const reply = await storage.getReplyById(id);
-        if (!reply) {
-          return res.status(404).json({ message: "Reply not found" });
-        }
-        // Check if the user is the owner of the reply
-        if (reply.userId !== userId) {
-          return res
-            .status(403)
-            .json({ message: "You can only edit your own replies" });
-        }
-        // Support for editing images: merge existing and new
-        let imagePaths: string[] = [];
-        let captions: string[] = [];
-        // Existing images/captions (kept by user)
-        if (Array.isArray(req.body.existingImagePaths)) {
-          imagePaths = req.body.existingImagePaths;
-        } else if (typeof req.body.existingImagePaths === "string") {
-          imagePaths = [req.body.existingImagePaths];
-        }
-        if (Array.isArray(req.body.existingCaptions)) {
-          captions = req.body.existingCaptions;
-        } else if (typeof req.body.existingCaptions === "string") {
-          captions = [req.body.existingCaptions];
-        }
-        // New images/captions
-        let newCaptions: string[] = [];
-        if (Array.isArray(req.body.captions)) {
-          newCaptions = req.body.captions;
-        } else if (typeof req.body.captions === "string") {
-          newCaptions = [req.body.captions];
-        }
-        const files = req.files as Express.Multer.File[];
-        if (files && files.length > 0) {
-          const newPaths = await Promise.all(
-            files.map((file) => uploadToCloudinary(file).then((r) => r.url)),
-          );
-          imagePaths = imagePaths.concat(newPaths);
-        }
-        // --- FIX: Always merge captions to match imagePaths length for replies ---
-        let mergedCaptions: string[] = [];
-        for (let i = 0; i < imagePaths.length - (files?.length || 0); i++) {
-          mergedCaptions.push(captions[i] || "");
-        }
-        for (let i = 0; i < (files?.length || 0); i++) {
-          mergedCaptions.push(newCaptions[i] || "");
-        }
-        if (imagePaths.length === 0) mergedCaptions = [];
-
-        // --- Delete removed images from Cloudinary ---
-        if (reply.imagePaths && Array.isArray(reply.imagePaths)) {
-          const removed = reply.imagePaths.filter((url: string) => !imagePaths.includes(url));
-          for (const url of removed) {
-            try {
-              const match = url.match(/\/forum_uploads\/([^./]+)(\.[a-zA-Z0-9]+)?$/);
-              let publicId = null;
-              if (match) {
-                publicId = `forum_uploads/${match[1]}`;
-              } else {
-                const fallback = url.split("/upload/")[1];
-                if (fallback) publicId = fallback.replace(/\.[a-zA-Z0-9]+$/, "").replace(/\?.*$/, "");
-              }
-              if (publicId) {
-                await cloudinary.uploader.destroy(publicId);
-              }
-            } catch (err) {
-              console.error("Failed to delete image from Cloudinary (edit):", url, err);
-            }
-          }
-        }
-
-        const data = {
-          ...req.body,
-          userId,
-          imagePaths,
-          captions: mergedCaptions,
-        };
-        const updatedReply = await storage.updateReply(id, data);
-        res.status(200).json(updatedReply);
-      } catch (error) {
-        res.status(400).json({
-          message: error instanceof Error ? error.message : "Invalid request",
-        });
-      }
-    },
-  );
+      });
+      res.status(200).json(reply);
+    } catch (error) {
+      res.status(400).json({
+        message: error instanceof Error ? error.message : "Invalid request",
+      });
+    }
+  });
 
   app.delete("/api/replies/:id", async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
-      const userId = parseInt(req.body.userId);
-
-      if (isNaN(id)) {
-        return res.status(400).json({ message: "Invalid reply ID" });
-      }
-
-      // Get reply by ID
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid reply ID" });
       const reply = await storage.getReplyById(id);
-
-      if (!reply) {
-        return res.status(404).json({ message: "Reply not found" });
-      }
-
-      // Check if the user is the owner of the reply
-      if (reply.userId !== userId) {
-        return res
-          .status(403)
-          .json({ message: "You can only delete your own replies" });
-      }
-
-      // --- Delete images from Cloudinary ---
-      if (reply.imagePaths && Array.isArray(reply.imagePaths)) {
-        for (const url of reply.imagePaths) {
-          try {
-            // Extract public ID from Cloudinary URL
-            const match = url.match(/\/forum_uploads\/([^./]+)(\.[a-zA-Z0-9]+)?$/);
-            let publicId = null;
-            if (match) {
-              publicId = `forum_uploads/${match[1]}`;
-            } else {
-              // fallback: try to extract after '/upload/'
-              const fallback = url.split("/upload/")[1];
-              if (fallback) publicId = fallback.replace(/\.[a-zA-Z0-9]+$/, "").replace(/\?.*$/, "");
-            }
-            if (publicId) {
-              await cloudinary.uploader.destroy(publicId);
-            }
-          } catch (err) {
-            console.error("Failed to delete image from Cloudinary:", url, err);
-          }
-        }
-      }
-
+      if (!reply) return res.status(404).json({ message: "Reply not found" });
       await storage.deleteReply(id);
+      // WebSocket: Notify all users about deleted reply
+      Array.from(clients.values()).forEach(client => {
+        if (client.ws.readyState === client.ws.OPEN) {
+          client.ws.send(JSON.stringify({ type: "reply", discussionId: reply.discussionId }));
+        }
+      });
       res.status(200).json({ message: "Reply deleted successfully" });
     } catch (error) {
       res.status(400).json({
@@ -726,127 +571,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Helpful mark routes
+  // --- HELPFUL MARK ROUTES ---
   app.post("/api/helpful", async (req: Request, res: Response) => {
     try {
-      const { userId, discussionId, replyId, type } = req.body; // type: 'upvote' | 'downvote'
-
-      if (!userId || (!discussionId && !replyId) || !type) {
-        return res.status(400).json({ message: "Invalid request parameters" });
-      }
-
-      const data = {
-        userId: parseInt(userId),
-        discussionId: discussionId ? parseInt(discussionId) : undefined,
-        replyId: replyId ? parseInt(replyId) : undefined,
-        type,
-      };
-
+      const data = insertHelpfulMarkSchema.parse(req.body);
       const mark = await storage.markAsHelpful(data);
-
-      // Get the user who marked as helpful
-      const markingUser = await storage.getUser(parseInt(userId));
-      if (!markingUser) {
-        return res.status(404).json({ message: "User not found" });
-      }
-
-      // Create notification based on whether it's for a discussion or reply
-      try {
-        if (discussionId) {
-          const discussion = await storage.getDiscussionById(
-            parseInt(discussionId),
-          );
-          if (discussion && discussion.userId !== parseInt(userId)) {
-            // Create notification for discussion author
-            const notificationData = {
-              userId: discussion.userId,
-              triggeredByUserId: parseInt(userId),
-              discussionId: parseInt(discussionId),
-              replyId: null,
-              type: "helpful",
-              message: `${markingUser.username} marked your discussion "${discussion.title}" as helpful`,
-            };
-
-            const notification =
-              await storage.createNotification(notificationData);
-
-            // Send email notification if user has email and notifications enabled
-            const discussionOwner = await storage.getUser(discussion.userId);
-            if (
-              discussionOwner &&
-              discussionOwner.email &&
-              discussionOwner.emailNotifications
-            ) {
-              const emailContent = generateHelpfulNotificationEmail(
-                discussionOwner.username,
-                markingUser.username,
-                discussion.title,
-                "discussion",
-                discussion.id,
-              );
-
-              await sendEmail(
-                discussionOwner.email,
-                `Your discussion was marked as helpful!`,
-                emailContent.text,
-                emailContent.html,
-              );
-
-              await storage.markNotificationEmailSent(notification.id);
-            }
+      // WebSocket: Notify all users about helpful mark
+      const discussionId = data.discussionId || (mark.replyId ? (await storage.getReplyById(mark.replyId))?.discussionId : null);
+      if (discussionId) {
+        Array.from(clients.values()).forEach(client => {
+          if (client.ws.readyState === client.ws.OPEN) {
+            client.ws.send(JSON.stringify({ type: "helpful", discussionId }));
           }
-        } else if (replyId) {
-          const reply = await storage.getReplyById(parseInt(replyId));
-          if (reply && reply.userId !== parseInt(userId)) {
-            // Get the parent discussion for context
-            const discussion = await storage.getDiscussionById(
-              reply.discussionId,
-            );
-
-            // Create notification for reply author
-            const notificationData = {
-              userId: reply.userId,
-              triggeredByUserId: parseInt(userId),
-              discussionId: reply.discussionId,
-              replyId: parseInt(replyId),
-              type: "helpful",
-              message: `${markingUser.username} marked your reply as helpful`,
-            };
-
-            const notification =
-              await storage.createNotification(notificationData);
-
-            // Send email notification
-            const replyOwner = await storage.getUser(reply.userId);
-            if (
-              replyOwner &&
-              replyOwner.email &&
-              replyOwner.emailNotifications
-            ) {
-              const emailContent = generateHelpfulNotificationEmail(
-                replyOwner.username,
-                markingUser.username,
-                discussion ? discussion.title : "a discussion",
-                "reply",
-                reply.discussionId,
-              );
-
-              await sendEmail(
-                replyOwner.email,
-                `Your reply was marked as helpful!`,
-                emailContent.text,
-                emailContent.html,
-              );
-
-              await storage.markNotificationEmailSent(notification.id);
-            }
-          }
-        }
-      } catch (error) {
-        console.error("Error creating helpful notification:", error);
-        // Don't fail the request if notification creation fails
+        });
       }
-
+      // --- Send notification to the recipient (discussion/reply owner) ---
+      let recipientUserId: number | undefined = undefined;
+      if (mark.replyId) {
+        const reply = await storage.getReplyById(mark.replyId);
+        if (reply) recipientUserId = reply.userId;
+      } else if (mark.discussionId) {
+        const discussion = await storage.getDiscussionById(mark.discussionId);
+        if (discussion) recipientUserId = discussion.user.id;
+      }
+      // Don't notify yourself
+      if (recipientUserId && recipientUserId !== data.userId) {
+        await storage.createNotification({
+          userId: recipientUserId,
+          triggeredByUserId: data.userId,
+          discussionId: discussionId || undefined,
+          replyId: mark.replyId || undefined,
+          type: "helpful",
+          message: `${req.body.username || "Someone"} marked your post as helpful`,
+        });
+        sendNotificationToUser(recipientUserId, { type: "notification" });
+      }
       res.status(201).json(mark);
     } catch (error) {
       res.status(400).json({
@@ -858,18 +617,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/helpful", async (req: Request, res: Response) => {
     try {
       const { userId, discussionId, replyId } = req.body;
-      if (!userId || (!discussionId && !replyId)) {
-        return res.status(400).json({ message: "Invalid request parameters" });
+      await storage.removeHelpfulMark(userId, discussionId, replyId);
+      // WebSocket: Notify all users about helpful mark removal
+      const did = discussionId || (replyId ? (await storage.getReplyById(replyId))?.discussionId : null);
+      if (did) {
+        Array.from(clients.values()).forEach(client => {
+          if (client.ws.readyState === client.ws.OPEN) {
+            client.ws.send(JSON.stringify({ type: "helpful", discussionId: did }));
+          }
+        });
       }
-      const result = await storage.removeHelpfulMark(
-        parseInt(userId),
-        discussionId ? parseInt(discussionId) : undefined,
-        replyId ? parseInt(replyId) : undefined
-      );
-      if (!result) {
-        return res.status(404).json({ message: "Helpful mark not found" });
-      }
-      res.status(200).json({ message: "Helpful mark removed successfully" });
+      res.status(200).json({ message: "Helpful mark removed" });
     } catch (error) {
       res.status(400).json({
         message: error instanceof Error ? error.message : "Invalid request",
@@ -877,51 +635,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Bookmark routes
+  // --- BOOKMARK ROUTES ---
   app.post("/api/bookmarks", async (req: Request, res: Response) => {
     try {
       const { userId, discussionId } = req.body;
-
       if (!userId || !discussionId) {
-        return res.status(400).json({ message: "Invalid request parameters" });
+        return res.status(400).json({ message: "userId and discussionId are required" });
       }
-
-      // Always save as a simple bookmark (no saveType/saveDiscussionThread)
+      // Save bookmark (saveDiscussionThread defaults to false)
       const bookmark = await storage.addBookmark({
         userId: parseInt(userId),
         discussionId: parseInt(discussionId),
-        saveDiscussionThread: false, // default/fixed value, not used in UI
+        saveDiscussionThread: false,
       });
-
-      res.status(201).json(bookmark);
+      res.status(201).json({ isBookmarked: true, bookmark });
     } catch (error) {
-      console.error("Error in /api/bookmarks endpoint:", error);
-      res.status(500).json({
-        message: error instanceof Error ? error.message : "Server error",
+      res.status(400).json({
+        message: error instanceof Error ? error.message : "Invalid request",
       });
     }
   });
 
   app.delete("/api/delete-bookmark", async (req: Request, res: Response) => {
     try {
-      // Not implemented: removeBookmark
-      // return res.status(501).json({ message: "Bookmark removal not implemented" });
       const { userId, discussionId } = req.body;
-
       if (!userId || !discussionId) {
-        return res.status(400).json({ message: "Invalid request parameters" });
+        return res.status(400).json({ message: "userId and discussionId are required" });
       }
-
-      const result = await storage.removeBookmark(
-        parseInt(userId),
-        parseInt(discussionId),
-      );
-
-      if (!result) {
-        return res.status(404).json({ message: "Bookmark not found" });
-      }
-
-      res.status(200).json({ message: "Bookmark removed successfully" });
+      await storage.removeBookmark(parseInt(userId), parseInt(discussionId));
+      res.status(200).json({ isBookmarked: false });
     } catch (error) {
       res.status(400).json({
         message: error instanceof Error ? error.message : "Invalid request",
@@ -929,55 +671,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Fix /api/bookmarks/check route
+  // --- GET USER BOOKMARKED DISCUSSIONS ---
+  app.get("/api/bookmarks", async (req: Request, res: Response) => {
+    try {
+      const userId = parseInt(req.query.userId as string);
+      if (!userId) {
+        return res.status(400).json({ message: "userId is required" });
+      }
+      const discussions = await storage.getBookmarkedDiscussions(userId);
+      res.status(200).json(discussions);
+    } catch (error) {
+      res.status(400).json({
+        message: error instanceof Error ? error.message : "Invalid request",
+      });
+    }
+  });
+
+  // --- CHECK IF DISCUSSION IS BOOKMARKED BY USER ---
   app.get("/api/bookmarks/check", async (req: Request, res: Response) => {
     try {
-      const { userId, discussionId } = req.query;
+      const userId = parseInt(req.query.userId as string);
+      const discussionId = parseInt(req.query.discussionId as string);
       if (!userId || !discussionId) {
-        return res.status(400).json({ message: "Invalid request parameters" });
+        return res.status(400).json({ isBookmarked: false, message: "userId and discussionId are required" });
       }
-      const getBookmarks = await storage.getBookmarkedDiscussions(
-        parseInt(userId as string),
-      );
-      let isBookmarked = false;
-      const isFound = getBookmarks.find((b) => {
-        return b.bookmark.discussionId === parseInt(String(discussionId));
-      });
-      if (isFound) {
-        isBookmarked = true;
-      }
+      const bookmarks = await storage.getBookmarkedDiscussions(userId);
+      const isBookmarked = bookmarks.some((b: any) => b.id === discussionId);
       res.status(200).json({ isBookmarked });
     } catch (error) {
-      res.status(400).json({
-        message: error instanceof Error ? error.message : "Invalid request",
-      });
+      res.status(400).json({ isBookmarked: false, message: error instanceof Error ? error.message : "Invalid request" });
     }
   });
-
-  // For userId, fallback to req.body.userId or req.query.userId only
-  app.get("/api/notifications", async (req: Request, res: Response) => {
-    try {
-      const userId = req.body?.userId || req.query?.userId;
-      if (!userId) {
-        return res.status(401).json({ message: "Unauthorized" });
-      }
-      const notifications = await storage.getNotifications(parseInt(userId));
-      res.status(200).json(notifications);
-    } catch (error) {
-      res.status(500).json({
-        message: error instanceof Error ? error.message : "Server error",
-      });
-    }
-  });
-  // ...repeat this fallback for other routes using req.session.userId...
-
-  // For updateUser, return 501 not implemented
-  app.patch("/api/user/profile", async (req: Request, res: Response) => {
-    return res.status(501).json({ message: "User update not implemented" });
-  });
-
-  // Serve uploaded files
-  app.use("/uploads", express.static(uploadsDir));
 
   return httpServer;
 }

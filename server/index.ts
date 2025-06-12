@@ -1,4 +1,5 @@
 import express, { type Request, Response, NextFunction } from "express";
+import session from "express-session";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { addEmailColumnsToUsers, createNotificationsTable } from "./migrations/addEmailToUsers";
@@ -11,6 +12,20 @@ import { up as upImagePaths, down as downImagePaths } from "./migrations/2024060
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+
+// Register session middleware before any routes
+app.use(
+  session({
+    secret: "your-secret-key", // Replace with a secure secret key
+    resave: false,
+    saveUninitialized: true,
+    cookie: {
+      sameSite: "lax", // works for localhost frontend/backend on different ports
+      secure: false,    // set to true if using HTTPS
+      httpOnly: true,
+    },
+  })
+);
 
 app.use((req, res, next) => {
   const start = Date.now();

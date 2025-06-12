@@ -267,9 +267,14 @@ export class MemStorage implements IStorage {
   async getRepliesByDiscussionId(discussionId: number): Promise<ReplyWithUser[]> {
     const allReplies = Array.from(this.replies.values())
       .filter(reply => reply.discussionId === discussionId);
-    
+    // Ensure parentId is always a number or null
+    allReplies.forEach(reply => {
+      if (typeof reply.parentId === 'string') {
+        reply.parentId = reply.parentId === '' ? null : parseInt(reply.parentId);
+      }
+    });
     // Get all top-level replies (no parentId)
-    const topReplies = allReplies.filter(reply => !reply.parentId);
+    const topReplies = allReplies.filter(reply => reply.parentId === null);
     
     // Create a map of replies with their users
     const repliesWithUsers: ReplyWithUser[] = [];
@@ -291,7 +296,12 @@ export class MemStorage implements IStorage {
       }
     }
     
-    return repliesWithUsers.sort((a, b) => (a.createdAt?.getTime() || 0) - (b.createdAt?.getTime() || 0));
+    // Always sort top-level replies by createdAt ascending (chronological)
+    return repliesWithUsers.sort((a, b) => {
+      const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return aTime - bTime;
+    });
   }
   
   private async getChildReplies(parentId: number, allReplies: Reply[]): Promise<ReplyWithUser[]> {
@@ -315,7 +325,12 @@ export class MemStorage implements IStorage {
       }
     }
     
-    return childRepliesWithUsers.sort((a, b) => (a.createdAt?.getTime() || 0) - (b.createdAt?.getTime() || 0));
+    // Always sort child replies by createdAt ascending (chronological)
+    return childRepliesWithUsers.sort((a, b) => {
+      const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return aTime - bTime;
+    });
   }
 
   async updateReply(id: number, partialReply: Partial<InsertReply>): Promise<Reply | undefined> {

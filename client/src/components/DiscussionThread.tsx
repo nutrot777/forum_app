@@ -53,12 +53,15 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({ discussion, filter 
 	const { data: discussionData, refetch } = useQuery({
 		queryKey: ["/api/discussions/" + discussion.id],
 		queryFn: async () => {
+			console.log("[DEBUG] Fetching discussion details for ID:", discussion.id);
 			const res = await fetch(`/api/discussions/${discussion.id}`);
 			if (!res.ok) throw new Error("Failed to fetch discussion");
 			return res.json();
 		},
 		initialData: discussion,
-		refetchInterval: 2000, // Poll every 2 seconds for new upvotes/downvotes
+		refetchOnMount: "always",
+		refetchOnWindowFocus: "always",
+		refetchInterval: 5000, // Poll every 5 seconds
 	});
 	// Keep local state in sync with server
 	useEffect(() => {
@@ -107,14 +110,16 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({ discussion, filter 
 					discussionId: discussion.id,
 					type: "upvote",
 				});
+				setIsMarked(false); // Set immediately for instant UI feedback
 			} else {
 				await apiRequest("POST", "/api/helpful", {
 					userId: user.id,
 					discussionId: discussion.id,
 					type: "upvote",
 				});
+				setIsMarked(true); // Set immediately for instant UI feedback
 			}
-			await checkIfMarkedAsHelpful(); // Ensure arrow color updates correctly
+			await checkIfMarkedAsHelpful(); // Optionally check backend for consistency
 			refetch();
 		} catch (error) {
 			toast({
@@ -128,34 +133,31 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({ discussion, filter 
 	const toggleBookmark = async () => {
 		if (!user) return;
 		try {
+			let response;
 			if (isBookmarked) {
-				await apiRequest("DELETE", "/api/bookmarks", {
+				response = await apiRequest("DELETE", "/api/delete-bookmark", {
 					userId: user.id,
 					discussionId: discussion.id,
-				});
-				// Always re-check status from backend after toggle
-				const response = await fetch(`/api/bookmarks/check?userId=${user.id}&discussionId=${discussion.id}`);
-				const data = await response.json();
-				setIsBookmarked(data.isBookmarked);
-				toast({
-					title: "Bookmark removed",
-					description: "This discussion was removed from your saved list.",
-					variant: "default",
-					// position: 'top-right' // If your toast system supports positioning
 				});
 			} else {
-				await apiRequest("POST", "/api/bookmarks", {
+				response = await apiRequest("POST", "/api/bookmarks", {
 					userId: user.id,
 					discussionId: discussion.id,
 				});
-				const response = await fetch(`/api/bookmarks/check?userId=${user.id}&discussionId=${discussion.id}`);
-				const data = await response.json();
-				setIsBookmarked(data.isBookmarked);
+			}
+			const data = await response.json();
+			setIsBookmarked(data.isBookmarked);
+			if (data.isBookmarked) {
 				toast({
 					title: "Discussion saved",
 					description: "This discussion was added to your saved list.",
 					variant: "default",
-					// position: 'top-right'
+				});
+			} else {
+				toast({
+					title: "Bookmark removed",
+					description: "This discussion was removed from your saved list.",
+					variant: "default",
 				});
 			}
 		} catch (error) {
@@ -457,17 +459,17 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({ discussion, filter 
 			</div>
 
 			{showReplies && (
-				<Replies discussionId={discussion.id} replies={discussionData.replies || []} onReplySuccess={refetch} />
+				<Replies discussionId={discussion.id} replies={discussionDataState.replies || []} onReplySuccess={refetch} />
 			)}
 
-			{!showReplies && discussion.replies?.length > 0 && (
+			{!showReplies && (discussionDataState.replies?.length > 0) && (
 				<div className="border-t border-gray-100 px-4 py-3 bg-gray-50 rounded-b-lg">
 					<Button
 						variant="ghost"
 						className="w-full text-center text-[#0079D3] font-medium text-sm"
 						onClick={() => setShowReplies(true)}
 					>
-						Show {discussion.replies?.length || 0} replies
+						Show {discussionDataState.replies?.length || 0} replies
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
 							viewBox="0 0 24 24"

@@ -121,7 +121,7 @@ export class DatabaseStorage implements IStorage {
 			}
 		}
 
-		console.log("Discussions with users:", discussionsWithUsers);
+		//console.log("Discussions with users:", discussionsWithUsers);
 
 		if (filter === "helpful") {
 			discussionsWithUsers.sort((a, b) => {
@@ -158,7 +158,8 @@ export class DatabaseStorage implements IStorage {
 			replyUsers = await db.select().from(users).where(inArray(users.id, userIds));
 		}
 		const repliesWithUsers: ReplyWithUser[] = [];
-		const topLevelReplies = allReplies.filter((r) => r.parentId === null);
+		// Treat parentId null, undefined, or 0 as top-level
+		const topLevelReplies = allReplies.filter((r) => r.parentId == null || r.parentId === 0);
 		for (const reply of topLevelReplies) {
 			const replyUser = replyUsers.find((u) => u.id === reply.userId);
 			if (replyUser) {
@@ -179,8 +180,7 @@ export class DatabaseStorage implements IStorage {
 	}
 
 	private buildReplyTree(parentId: number, allReplies: Reply[], replyUsers: User[]): ReplyWithUser[] {
-		// allReplies must be normalized before calling this
-		const childReplies: ReplyWithUser[] = [];
+		let childReplies: ReplyWithUser[] = [];
 		const directChildren = allReplies.filter((r) => r.parentId === parentId);
 		for (const child of directChildren) {
 			const childUser = replyUsers.find((u) => u.id === child.userId);
@@ -194,7 +194,12 @@ export class DatabaseStorage implements IStorage {
 				});
 			}
 		}
-		return childReplies;
+		// Always sort by createdAt ascending (chronological)
+		return childReplies.sort((a, b) => {
+			const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+			const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+			return aTime - bTime;
+		});
 	}
 
 	async updateDiscussion(id: number, partialDiscussion: Partial<InsertDiscussion>): Promise<Discussion | undefined> {
@@ -244,13 +249,15 @@ export class DatabaseStorage implements IStorage {
 	async getRepliesByDiscussionId(discussionId: number): Promise<ReplyWithUser[]> {
 		const allRepliesRaw = await db.select().from(replies).where(eq(replies.discussionId, discussionId));
 		const allReplies = allRepliesRaw.map(normalizeReply);
+		console.log("[DEBUG] getRepliesByDiscussionId for", discussionId, allReplies); // DEBUG LOG
 		const userIds = Array.from(new Set(allReplies.map((r) => r.userId)));
 		let replyUsers: User[] = [];
 		if (userIds.length > 0) {
 			replyUsers = await db.select().from(users).where(inArray(users.id, userIds));
 		}
-		const topLevelReplies = allReplies.filter((r) => r.parentId === null);
-		const result: ReplyWithUser[] = [];
+		// Treat parentId null, undefined, or 0 or '' as top-level
+		const topLevelReplies = allReplies.filter((r) => r.parentId == null || r.parentId === 0 || r.parentId === '' || r.parentId === undefined);
+		let result: ReplyWithUser[] = [];
 		for (const reply of topLevelReplies) {
 			const user = replyUsers.find((u) => u.id === reply.userId);
 			if (user) {
@@ -263,7 +270,12 @@ export class DatabaseStorage implements IStorage {
 				});
 			}
 		}
-		return result;
+		// Always sort top-level replies by createdAt ascending (chronological)
+		return result.sort((a, b) => {
+			const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+			const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+			return aTime - bTime;
+		});
 	}
 
 	async updateReply(id: number, partialReply: Partial<InsertReply>): Promise<Reply | undefined> {
