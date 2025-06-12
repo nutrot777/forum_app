@@ -25,6 +25,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { useQuery } from "@tanstack/react-query";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import CreatePost from "./CreatePost";
 
 interface DiscussionThreadProps {
 	discussion: DiscussionWithDetails;
@@ -40,6 +41,7 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({ discussion, filter 
 	const [editTitle, setEditTitle] = useState(discussion.title);
 	const [editContent, setEditContent] = useState(discussion.content);
 	const [isBookmarked, setIsBookmarked] = useState(false);
+	const [discussionDataState, setDiscussionDataState] = useState(discussion);
 	const discussionRef = useRef<HTMLDivElement>(null);
 
 	// Add logging to debug the `discussion` object
@@ -58,6 +60,10 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({ discussion, filter 
 		initialData: discussion,
 		refetchInterval: 2000, // Poll every 2 seconds for new upvotes/downvotes
 	});
+	// Keep local state in sync with server
+	useEffect(() => {
+		if (discussionData) setDiscussionDataState(discussionData);
+	}, [discussionData]);
 
 	// Check if current user has marked this discussion as helpful
 	const checkIfMarkedAsHelpful = async () => {
@@ -85,8 +91,7 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({ discussion, filter 
 			}
 		};
 		checkBookmark();
-		// }, [user, discussion.id]);
-	}, [user, discussion.id, isBookmarked, filter]);
+	}, [user, discussion.id, filter]); // removed isBookmarked from deps
 
 	// Run on component mount
 	useEffect(() => {
@@ -128,45 +133,33 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({ discussion, filter 
 					userId: user.id,
 					discussionId: discussion.id,
 				});
+				// Always re-check status from backend after toggle
+				const response = await fetch(`/api/bookmarks/check?userId=${user.id}&discussionId=${discussion.id}`);
+				const data = await response.json();
+				setIsBookmarked(data.isBookmarked);
+				toast({
+					title: "Bookmark removed",
+					description: "This discussion was removed from your saved list.",
+					variant: "default",
+					// position: 'top-right' // If your toast system supports positioning
+				});
 			} else {
 				await apiRequest("POST", "/api/bookmarks", {
 					userId: user.id,
 					discussionId: discussion.id,
 				});
+				const response = await fetch(`/api/bookmarks/check?userId=${user.id}&discussionId=${discussion.id}`);
+				const data = await response.json();
+				setIsBookmarked(data.isBookmarked);
+				toast({
+					title: "Discussion saved",
+					description: "This discussion was added to your saved list.",
+					variant: "default",
+					// position: 'top-right'
+				});
 			}
-			setIsBookmarked(!isBookmarked);
 		} catch (error) {
 			console.error("Failed to toggle bookmark:", error);
-		}
-	};
-
-	const handleSaveOption = async (option: "current" | "continuous") => {
-		if (!user) return;
-		try {
-			if (option === "current") {
-				await apiRequest("POST", "/api/bookmarks", {
-					userId: user.id,
-					discussionId: discussion.id,
-					saveType: "current",
-				});
-			} else {
-				await apiRequest("POST", "/api/bookmarks", {
-					userId: user.id,
-					discussionId: discussion.id,
-					saveType: "continuous",
-				});
-			}
-			setIsBookmarked(true);
-			toast({
-				title: "Success",
-				description: `Discussion saved as ${option === "current" ? "current thread" : "continuous update"}`,
-			});
-		} catch (error) {
-			toast({
-				title: "Error",
-				description: error instanceof Error ? error.message : "Failed to save discussion",
-				variant: "destructive",
-			});
 		}
 	};
 
@@ -304,191 +297,192 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({ discussion, filter 
 		return null;
 	}
 
-  return (
-    <div ref={discussionRef} className="bg-white rounded-lg shadow mb-4">
-      <div className="p-4">
-        <div className="flex items-start">
-          <div className="flex flex-col items-center mr-4">
-            <Button
-              variant="ghost"
-              size="sm"
-              aria-label="Mark as helpful"
-              onClick={handleToggleHelpful}
-            >
-              <ArrowUp className={`h-6 w-6 mr-1 ${isMarked ? 'text-[#FF4500]' : 'text-gray-400'} hover:text-[#FF4500]'`} />
-            </Button>
-            <span className={`text-sm font-medium ${isMarked ? 'text-[#FF4500]' : 'text-gray-600'} hover:text-[#FF4500]'`}>
-              {discussionData.helpfulCount || 0}
-            </span>
-          </div>
-          
-          <div className="flex-1">
-            {isEditing ? (
-              <div>
-                <Input
-                  value={editTitle}
-                  onChange={(e) => setEditTitle(e.target.value)}
-                  className="font-ibm font-semibold text-xl mb-3 w-full"
-                />
-                <Textarea
-                  value={editContent}
-                  onChange={(e) => setEditContent(e.target.value)}
-                  className="w-full min-h-[100px] mb-3"
-                />
-                <div className="flex space-x-2">
-                  <Button onClick={handleSaveEdit}>Save</Button>
-                  <Button variant="outline" onClick={() => setIsEditing(false)}>Cancel</Button>
-                </div>
-              </div>
-            ) : (
-              <>
-                <div className="flex justify-between items-start">
-                  <h3 className="font-ibm font-semibold text-xl mb-1">{discussion.title}</h3>
-                  {isOwner && (
-                    <div className="flex space-x-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="text-gray-500 hover:text-[#0079D3] h-8 w-8"
-                        onClick={() => setIsEditing(true)}
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="text-gray-500 hover:text-red-500 h-8 w-8"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              This action cannot be undone. This will permanently delete your discussion
-                              and all its replies.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction onClick={handleDeleteDiscussion}>Delete</AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </div>
-                  )}
-                </div>
-                
-                <div className="flex items-center space-x-2 mb-3 text-sm text-gray-600">
-                  <Avatar className="w-5 h-5">
-                    <AvatarImage
-                      src={`https://ui-avatars.com/api/?name=${discussion.user?.username || "Unknown"}&background=random`}
-                      alt={discussion.user?.username || "Unknown"}
-                    />
-                    <AvatarFallback>
-                      {discussion.user?.username?.charAt(0).toUpperCase() || "U"}
-                    </AvatarFallback>
-                  </Avatar>
-                  <span className="font-medium">{discussion.user?.username || "Unknown"}</span>
-                  {isOwner && (
-                    <span className="bg-[#0079D3]/10 text-[#0079D3] text-xs px-1.5 py-0.5 rounded">You</span>
-                  )}
-                  <span>•</span>
-                  <span>{createdAt}</span>
-                </div>
-                
-                <div className="prose max-w-none mb-4">
-                  <p>{discussion.content}</p>
-                  
-                  {discussion.imagePath && (
-                    <img
-                      src={discussion.imagePath}
-                      alt="Discussion attachment"
-                      className="my-3 rounded-md border border-gray-200 max-h-96 object-contain"
-                    />
-                  )}
-                </div>
-              </>
-            )}
-            
-            <div className="flex items-center space-x-4 text-sm">
-              <Button
-                variant="ghost"
-                className={`flex items-center transition-colors ${showReplies ? 'text-[#0079D3] font-semibold' : 'text-gray-600'} hover:text-[#0079D3]`}
-                onClick={() => setShowReplies(!showReplies)}
-              >
-                <MessageSquare className="h-4 w-4 mr-1" />
-                <span>Show Replies{typeof discussionData.replies === 'object' ? ` (${discussionData.replies.length})` : ''}</span>
-              </Button>
-              <Popover>
-                <PopoverTrigger>
-                  <Button
-                    variant="ghost"
-                    className="flex items-center text-gray-600 hover:text-[#0079D3]"
-                  >
-                    <Bookmark
-                      className={`h-4 w-4 mr-1 ${isBookmarked ? 'fill-current text-[#0079D3]' : ''}`}
-                    />
-                    <span>Save</span>
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="p-4 bg-white shadow-lg rounded-md border border-gray-200">
-                  <h4 className="text-sm font-medium text-gray-700 mb-2">Save Options</h4>
-                  <div className="flex flex-col space-y-2">
-                    <Button
-                      variant="outline"
-                      className="text-sm text-gray-600 hover:text-[#0079D3] hover:border-[#0079D3]"
-                      onClick={() => handleSaveOption("current")}
-                    >
-                      Save Current Thread
-                    </Button>
-                    <Button
-                      variant="outline"
-                      className="text-sm text-gray-600 hover:text-[#0079D3] hover:border-[#0079D3]"
-                      onClick={() => handleSaveOption("continuous")}
-                    >
-                      Save Continuous Update
-                    </Button>
-                  </div>
-                </PopoverContent>
-              </Popover>
-              <Button
-                variant="ghost"
-                className="flex items-center text-gray-600 hover:text-[#0079D3]"
-                onClick={handleShareDiscussion}
-              >
-                <Share className="h-4 w-4 mr-1" />
-                <span>Share</span>
-              </Button>
-            </div>
-          </div>
-        </div>
-      </div>
-      
-      {showReplies && (
-        <Replies 
-          discussionId={discussion.id} 
-          replies={discussionData.replies || []} 
-          onReplySuccess={refetch}
-        />
-      )}
-      
-      {!showReplies && discussion.replies?.length > 0 && (
-        <div className="border-t border-gray-100 px-4 py-3 bg-gray-50 rounded-b-lg">
-          <Button 
-            variant="ghost"
-            className="w-full text-center text-[#0079D3] font-medium text-sm"
-            onClick={() => setShowReplies(true)}
-          >
-            Show {discussion.replies?.length || 0} replies <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="inline-block ml-1 h-4 w-4"><polyline points="6 9 12 15 18 9"></polyline></svg>
-          </Button>
-        </div>
-      )}
-    </div>
-  );
+	return (
+		<div ref={discussionRef} className="bg-white rounded-lg shadow mb-4">
+			<div className="p-4">
+				<div className="flex items-start">
+					<div className="flex flex-col items-center mr-4">
+						<Button variant="ghost" size="sm" aria-label="Mark as helpful" onClick={handleToggleHelpful}>
+							<ArrowUp
+								className={`h-6 w-6 text-gray-400 hover:text-[#FF4500] ${
+									isMarked ? "text-[#FF4500]" : ""
+								}`}
+							/>
+						</Button>
+						<span className="text-sm font-medium">{discussionDataState.helpfulCount || 0}</span>
+					</div>
+
+					<div className="flex-1">
+						{isEditing ? (
+							<CreatePost
+								onSuccess={(updated) => {
+									if (updated) setDiscussionDataState(updated);
+									setIsEditing(false);
+									refetch();
+								}}
+								editingDiscussion={{
+									id: discussionDataState.id,
+									title: discussionDataState.title,
+									content: discussionDataState.content,
+									imagePaths: discussionDataState.imagePaths || [],
+									captions: discussionDataState.captions || [],
+								}}
+							/>
+						) : (
+							<>
+								<div className="flex justify-between items-start">
+									<h3 className="font-ibm font-semibold text-xl mb-1">{discussionDataState.title}</h3>
+									{isOwner && (
+										<div className="flex space-x-1">
+											<Button
+												variant="ghost"
+												size="icon"
+												className="text-gray-500 hover:text-[#0079D3] h-8 w-8"
+												onClick={() => setIsEditing(true)}
+											>
+												<Edit className="h-4 w-4" />
+											</Button>
+											<AlertDialog>
+												<AlertDialogTrigger asChild>
+													<Button
+														variant="ghost"
+														size="icon"
+														className="text-gray-500 hover:text-red-500 h-8 w-8"
+													>
+														<Trash2 className="h-4 w-4" />
+													</Button>
+												</AlertDialogTrigger>
+												<AlertDialogContent>
+													<AlertDialogHeader>
+														<AlertDialogTitle>Are you sure?</AlertDialogTitle>
+														<AlertDialogDescription>
+															This action cannot be undone. This will permanently delete
+															your discussion and all its replies.
+														</AlertDialogDescription>
+													</AlertDialogHeader>
+													<AlertDialogFooter>
+														<AlertDialogCancel>Cancel</AlertDialogCancel>
+														<AlertDialogAction onClick={handleDeleteDiscussion}>
+															Delete
+														</AlertDialogAction>
+													</AlertDialogFooter>
+												</AlertDialogContent>
+											</AlertDialog>
+										</div>
+									)}
+								</div>
+
+								<div className="flex items-center space-x-2 mb-3 text-sm text-gray-600">
+									<Avatar className="w-5 h-5">
+										<AvatarImage
+											src={`https://ui-avatars.com/api/?name=${
+												discussionDataState.user?.username || "Unknown"
+											}&background=random`}
+											alt={discussionDataState.user?.username || "Unknown"}
+										/>
+										<AvatarFallback>
+											{discussionDataState.user?.username?.charAt(0).toUpperCase() || "U"}
+										</AvatarFallback>
+									</Avatar>
+									<span className="font-medium">{discussionDataState.user?.username || "Unknown"}</span>
+									{isOwner && (
+										<span className="bg-[#0079D3]/10 text-[#0079D3] text-xs px-1.5 py-0.5 rounded">
+											You
+										</span>
+									)}
+									<span>•</span>
+									<span>{createdAt}</span>
+								</div>
+
+								<div className="prose max-w-none mb-4">
+									<p>{discussionDataState.content}</p>
+									{discussionDataState.imagePaths && discussionDataState.imagePaths.length > 0 && (
+										<div className="flex flex-wrap gap-2 mt-2">
+											{discussionDataState.imagePaths.map((url, idx) => (
+												<div key={idx} className="flex flex-col items-center">
+													<img
+														src={url}
+														alt={`Discussion attachment ${idx + 1}`}
+														className="rounded-md border border-gray-200 max-h-64 object-contain max-w-xs"
+														style={{ flex: '1 1 200px', minWidth: 0 }}
+													/>
+													{discussionDataState.captions && discussionDataState.captions[idx] && (
+														<span className="text-xs text-gray-500 mt-1">{discussionDataState.captions[idx]}</span>
+													)}
+												</div>
+											))}
+										</div>
+									)}
+								</div>
+							</>
+						)}
+
+						<div className="flex items-center space-x-4 text-sm">
+							<Button
+								variant="ghost"
+								className={`flex items-center transition-colors ${
+									showReplies ? "text-[#0079D3] font-semibold" : "text-gray-600"
+								} hover:text-[#0079D3]`}
+								onClick={() => setShowReplies(!showReplies)}
+							>
+								<MessageSquare className="h-4 w-4 mr-1" />
+								<span>
+									Show Replies
+									{typeof discussionData.replies === "object"
+										? ` (${discussionData.replies.length})`
+										: ""}
+								</span>
+							</Button>
+							<Button
+								variant="ghost"
+								className={`flex items-center text-gray-600 hover:text-[#0079D3] ${isBookmarked ? "font-semibold text-[#0079D3]" : ""}`}
+								onClick={toggleBookmark}
+							>
+								<Bookmark className={`h-4 w-4 mr-1 ${isBookmarked ? "fill-current text-[#0079D3]" : ""}`} />
+								<span>Save</span>
+							</Button>
+							<Button
+								variant="ghost"
+								className="flex items-center text-gray-600 hover:text-[#0079D3]"
+								onClick={handleShareDiscussion}
+							>
+								<Share className="h-4 w-4 mr-1" />
+								<span>Share</span>
+							</Button>
+						</div>
+					</div>
+				</div>
+			</div>
+
+			{showReplies && (
+				<Replies discussionId={discussion.id} replies={discussionData.replies || []} onReplySuccess={refetch} />
+			)}
+
+			{!showReplies && discussion.replies?.length > 0 && (
+				<div className="border-t border-gray-100 px-4 py-3 bg-gray-50 rounded-b-lg">
+					<Button
+						variant="ghost"
+						className="w-full text-center text-[#0079D3] font-medium text-sm"
+						onClick={() => setShowReplies(true)}
+					>
+						Show {discussion.replies?.length || 0} replies
+						<svg
+							xmlns="http://www.w3.org/2000/svg"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							strokeWidth="2"
+							strokeLinecap="round"
+							strokeLinejoin="round"
+							className="inline-block ml-1 h-4 w-4"
+						>
+							<polyline points="6 9 12 15 18 9"></polyline>
+						</svg>
+					</Button>
+				</div>
+			)}
+		</div>
+	);
 };
 
 export default DiscussionThread;

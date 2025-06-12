@@ -5,6 +5,7 @@ import { addEmailColumnsToUsers, createNotificationsTable } from "./migrations/a
 import { up, down } from "./migrations/add_type_to_helpful_marks";
 import { up as upUpvoteDownvoteCount, down as downUpvoteDownvoteCount } from "./migrations/add_upvote_downvote_count";
 import {up as upBookmarks, down as downBookmarks} from "./migrations/20240515_add_bookmarks";
+import { up as upImagePaths, down as downImagePaths } from "./migrations/20240609_add_imagepaths_array";
 
 
 const app = express();
@@ -50,6 +51,7 @@ app.use((req, res, next) => {
     await up();
     await upUpvoteDownvoteCount();
     await upBookmarks();
+    await upImagePaths();
     log("Migrations completed successfully");
   } catch (err) {
     log("Error running migrations: " + (err as Error).message);

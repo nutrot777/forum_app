@@ -45,7 +45,16 @@ export const api = {
   },
   
   deleteDiscussion: async (id: number, userId: number) => {
-    const response = await apiRequest("DELETE", `/api/discussions/${id}`, { userId });
+    const response = await apiRequest("DELETE", `/api/discussions/${id}`, {
+      userId,
+    });
+    return response.json();
+  },
+
+  deleteBookmark: async (id: number, userId: number) => {
+    const response = await apiRequest("DELETE", `/api/delete-bookmark/`, {
+      userId,
+    });
     return response.json();
   },
   

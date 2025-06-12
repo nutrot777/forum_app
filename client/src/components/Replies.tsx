@@ -62,6 +62,7 @@ const ReplyItem: React.FC<ReplyItemProps> = ({ reply, discussionId, depth = 0, o
   const [isMarked, setIsMarked] = useState(false);
   const [helpfulCount, setHelpfulCount] = useState(reply.helpfulCount || 0);
   const [isBookmarked, setIsBookmarked] = useState(false);
+  const [replyData, setReplyData] = useState(reply);
   
   // Check if current user has marked this reply as helpful
   const checkIfMarkedAsHelpful = async () => {
@@ -250,27 +251,39 @@ const ReplyItem: React.FC<ReplyItemProps> = ({ reply, discussionId, depth = 0, o
           </div>
           
           {isEditing ? (
-            <div>
-              <Textarea
-                value={editContent}
-                onChange={(e) => setEditContent(e.target.value)}
-                className="w-full min-h-[100px] mb-3 text-sm"
-              />
-              <div className="flex space-x-2">
-                <Button size="sm" onClick={handleSaveEdit}>Save</Button>
-                <Button size="sm" variant="outline" onClick={() => setIsEditing(false)}>Cancel</Button>
-              </div>
-            </div>
+            <ReplyForm
+              discussionId={discussionId}
+              editingReply={{
+                id: replyData.id,
+                content: replyData.content,
+                imagePaths: replyData.imagePaths || [],
+                captions: replyData.captions || [],
+              }}
+              onSuccess={(updated) => {
+                if (updated) setReplyData(updated);
+                setIsEditing(false);
+                if (onReplySuccess) onReplySuccess();
+              }}
+            />
           ) : (
             <div className="prose prose-sm max-w-none mb-2">
-              <p>{reply.content}</p>
+              <p>{replyData.content}</p>
               
-              {reply.imagePath && (
-                <img
-                  src={reply.imagePath}
-                  alt="Reply attachment"
-                  className="my-2 rounded-md border border-gray-200 max-h-64 object-contain"
-                />
+              {replyData.imagePaths && replyData.imagePaths.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {replyData.imagePaths.map((url, idx) => (
+                    <div key={idx} className="flex flex-col items-center">
+                      <img
+                        src={url}
+                        alt={`Reply attachment ${idx + 1}`}
+                        className="my-2 rounded-md border border-gray-200 max-h-64 object-contain max-w-xs"
+                      />
+                      {replyData.captions && replyData.captions[idx] && (
+                        <span className="text-xs text-gray-500 mt-1">{replyData.captions[idx]}</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
           )}

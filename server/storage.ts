@@ -144,7 +144,8 @@ export class MemStorage implements IStorage {
       title: insertDiscussion.title,
       content: insertDiscussion.content,
       userId: insertDiscussion.userId,
-      imagePath: insertDiscussion.imagePath || null,
+      imagePaths: insertDiscussion.imagePaths || [],
+      captions: Array.isArray(insertDiscussion.captions) ? insertDiscussion.captions : [],
       helpfulCount: 0,
       upvoteCount: 0,
       downvoteCount: 0,
@@ -206,10 +207,10 @@ export class MemStorage implements IStorage {
   async updateDiscussion(id: number, partialDiscussion: Partial<InsertDiscussion>): Promise<Discussion | undefined> {
     const discussion = this.discussions.get(id);
     if (!discussion) return undefined;
-
     const updatedDiscussion: Discussion = {
       ...discussion,
-      ...partialDiscussion
+      ...partialDiscussion,
+      imagePaths: partialDiscussion.imagePaths || discussion.imagePaths || [],
     };
     this.discussions.set(id, updatedDiscussion);
     return updatedDiscussion;
@@ -245,7 +246,7 @@ export class MemStorage implements IStorage {
       userId: insertReply.userId,
       discussionId: insertReply.discussionId,
       parentId: insertReply.parentId || null,
-      imagePath: insertReply.imagePath || null,
+      imagePaths: insertReply.imagePaths || [],
       helpfulCount: 0,
       upvoteCount: 0,
       downvoteCount: 0,
@@ -316,10 +317,10 @@ export class MemStorage implements IStorage {
   async updateReply(id: number, partialReply: Partial<InsertReply>): Promise<Reply | undefined> {
     const reply = this.replies.get(id);
     if (!reply) return undefined;
-
     const updatedReply: Reply = {
       ...reply,
-      ...partialReply
+      ...partialReply,
+      imagePaths: partialReply.imagePaths || reply.imagePaths || [],
     };
     this.replies.set(id, updatedReply);
     return updatedReply;
@@ -630,7 +631,7 @@ export const storage = {
   getUnreadNotificationsCount: databaseStorage.getUnreadNotificationsCount.bind(databaseStorage),
   markNotificationEmailSent: databaseStorage.markNotificationEmailSent.bind(databaseStorage),
   getPendingEmailNotifications: databaseStorage.getPendingEmailNotifications.bind(databaseStorage),
-  // getBookmarkedDiscussions: databaseStorage.getBookmarkedDiscussions.bind(databaseStorage),
-  // addBookmark: databaseStorage.addBookmark.bind(databaseStorage),
-  getTotalUserCount: databaseStorage.getTotalUserCount.bind(databaseStorage),
+  getBookmarkedDiscussions: databaseStorage.getBookmarkedDiscussions.bind(databaseStorage),
+  addBookmark: databaseStorage.addBookmark.bind(databaseStorage),
+  removeBookmark: databaseStorage.removeBookmark.bind(databaseStorage),
 };
