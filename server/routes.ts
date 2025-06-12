@@ -954,29 +954,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Fix helpful mark route type error (remove extra argument)
-  app.delete("/api/helpful", async (req: Request, res: Response) => {
-    try {
-      const { userId, discussionId, replyId } = req.body;
-      if (!userId || (!discussionId && !replyId)) {
-        return res.status(400).json({ message: "Invalid request parameters" });
-      }
-      const result = await storage.removeHelpfulMark(
-        parseInt(userId),
-        discussionId ? parseInt(discussionId) : undefined,
-        replyId ? parseInt(replyId) : undefined
-      );
-      if (!result) {
-        return res.status(404).json({ message: "Helpful mark not found" });
-      }
-      res.status(200).json({ message: "Helpful mark removed successfully" });
-    } catch (error) {
-      res.status(400).json({
-        message: error instanceof Error ? error.message : "Invalid request",
-      });
-    }
-  });
-
   // For userId, fallback to req.body.userId or req.query.userId only
   app.get("/api/notifications", async (req: Request, res: Response) => {
     try {
